@@ -1,5 +1,6 @@
 import { connectTerminal } from './socket.js';
 import { loadSessions, computeUniqueSessionName } from './sessions.js';
+import { showToast } from './toast.js';
 
 const modalOverlay = document.getElementById('modal-overlay');
 const btnOpenModal = document.getElementById('btn-open-modal');
@@ -127,17 +128,12 @@ function renderFolderList() {
   matched.forEach((folder) => {
     const item = document.createElement('div');
     item.className = `picker-item ${selectedCwd === folder.path ? 'active' : ''}`;
-    item.innerHTML = `
-      <span class="picker-item-icon">📁</span>
-      <span class="picker-item-name">${folder.name}</span>
-      ${selectedCwd === folder.path ? '<span class="picker-check">✓</span>' : ''}
-    `;
-
+    const checkIcon = selectedCwd === folder.path ? '<span class="picker-check">✓</span>' : '';
+    item.innerHTML = `<span class="picker-item-icon">📁</span><span class="picker-item-name">${folder.name}</span>${checkIcon}`;
     item.addEventListener('click', () => {
       setSelectedCwd(folder.path, folder.displayPath || folder.name, folder.name);
       renderFolderList();
     });
-
     pickerFolderList.appendChild(item);
   });
 }
@@ -173,7 +169,7 @@ export function initModal() {
     const command = newSessionCommandInput.value.trim() || 'agy';
 
     if (!cwd) {
-      alert('Please select a subdirectory from one of the allowed folders.');
+      showToast('Please select a subdirectory from one of the allowed folders.', 'warning');
       return;
     }
 
@@ -191,10 +187,11 @@ export function initModal() {
 
       const data = await res.json();
       closeModal();
+      showToast(`Created session '${data.name || name}'`, 'success');
       await loadSessions(data.name || name);
       connectTerminal(data.name || name);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showToast(`Error: ${err.message}`, 'error');
     }
   });
 }

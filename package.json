@@ -8,6 +8,7 @@
     "dev": "concurrently -k -n \"server,vite\" -c \"cyan,magenta\" \"node --watch src/server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
+    "check": "node --check src/*.js src/routes/*.js src/client/*.js public/sw.js && vite build",
     "server": "node --watch src/server.js",
     "start": "node src/server.js",
     "session": "tmux attach-session -t agy-main || tmux new-session -s agy-main agy"

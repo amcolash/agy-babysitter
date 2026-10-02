@@ -17,6 +17,11 @@ export function toggleFabMenu(forceState = null) {
   if (isFabOpen) {
     fabMenu.classList.remove('hidden');
     btnFab.classList.add('ring-2', 'ring-[#51afef]', 'ring-offset-2', 'ring-offset-[#282c34]');
+    // Blur virtual keyboard if open
+    if (document.activeElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
+    term.blur();
   } else {
     fabMenu.classList.add('hidden');
     btnFab.classList.remove('ring-2', 'ring-[#51afef]', 'ring-offset-2', 'ring-offset-[#282c34]');

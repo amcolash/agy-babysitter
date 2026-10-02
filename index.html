@@ -1,145 +1,257 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="h-full bg-[#282c34]">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>agy Babysitter</title>
-  
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-  <link rel="apple-touch-icon" href="/icon-192.png" />
-  <meta name="theme-color" content="#21242b" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="agy Babysitter" />
-  <meta name="description" content="Remote persistent web terminal babysitter for agy tmux sessions" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>agy Babysitter</title>
 
-  <link rel="stylesheet" href="/src/client/style.css" />
-</head>
-<body class="h-full w-full bg-[#282c34] text-[#bbc2cf] font-mono antialiased select-none overflow-hidden">
-  <div id="app-container" class="flex flex-col h-screen h-[100dvh] w-screen p-2 md:p-3 gap-2 relative">
-    <!-- Combined Top Control & Action Bar -->
-    <header id="controls-bar" class="flex flex-wrap items-center justify-between bg-[#21242b] border border-[#3f444a] rounded-lg px-2.5 py-1.5 md:px-3 md:py-2 gap-2 shadow-lg shadow-black/40">
-      <!-- Session Controls -->
-      <div class="session-controls flex items-center gap-1.5 flex-1 sm:flex-initial min-w-[200px]">
-        <label for="session-select" class="sr-only">Session:</label>
-        <div class="session-select-wrapper flex-1 relative min-w-[120px] max-w-xs">
-          <select id="session-select" title="Active tmux sessions" class="w-full bg-[#1b2229] text-[#DFDFDF] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] rounded-md px-2.5 py-1.5 text-xs md:text-sm outline-none cursor-pointer transition">
-            <option value="">Loading sessions...</option>
-          </select>
-        </div>
-        <button id="btn-kill-session" title="Close/kill selected tmux session" class="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[#282c34] border border-[#ff6c6b]/40 hover:bg-[#ff6c6b] hover:border-[#ff6c6b] text-[#ff6c6b] hover:text-[#1b2229] transition duration-150 cursor-pointer flex-shrink-0 text-xs md:text-sm font-bold" aria-label="Kill Session">
-          ✕
-        </button>
-        <button id="btn-open-modal" class="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-sm shadow-black/40 cursor-pointer flex-shrink-0">
-          <span>+</span> New
-        </button>
-      </div>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="theme-color" content="#21242b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="agy Babysitter" />
+    <meta name="description" content="Remote persistent web terminal babysitter for agy tmux sessions" />
 
-      <!-- Connection Status -->
-      <div class="connection-status flex items-center gap-2 bg-[#1b2229] border border-[#3f444a] px-2.5 py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0">
-        <span id="status-dot" class="dot disconnected"></span>
-        <span id="status-text" class="text-[#bbc2cf] text-xs max-w-[160px] sm:max-w-none truncate">Disconnected</span>
-      </div>
-    </header>
-
-    <!-- Terminal Container -->
-    <main id="terminal-container" class="flex-1 min-h-0 bg-[#1b2229] border border-[#3f444a] focus-within:border-[#51afef]/70 rounded-lg overflow-hidden p-1 relative shadow-inner">
-      <div id="terminal" class="w-full h-full"></div>
-    </main>
-
-    <!-- Floating Action Button (FAB) Speed Dial -->
-    <div id="fab-container" class="fixed bottom-4 right-4 z-40 flex flex-col items-center">
-      <!-- Speed dial sub-buttons: ESC, Up, Down, Enter (opened above keyboard FAB) -->
-      <div id="fab-menu" class="hidden flex flex-col items-center gap-2.5 mb-2.5 transition-all duration-200 ease-out origin-bottom">
-        <button id="btn-fab-esc" title="Send Escape (Esc)" class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#ff6c6b] hover:bg-[#ff6c6b]/20 text-[#ff6c6b] flex items-center justify-center font-bold text-xs shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer">
-          ESC
-        </button>
-        <button id="btn-fab-up" title="Send Up Arrow (▲)" class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#282c34] text-[#DFDFDF] hover:text-[#51afef] flex items-center justify-center font-bold text-sm shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer">
-          ▲
-        </button>
-        <button id="btn-fab-down" title="Send Down Arrow (▼)" class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#282c34] text-[#DFDFDF] hover:text-[#51afef] flex items-center justify-center font-bold text-sm shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer">
-          ▼
-        </button>
-        <button id="btn-fab-enter" title="Send Enter (↵)" class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#51afef] text-[#51afef] hover:text-[#1b2229] flex items-center justify-center font-bold text-base shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer">
-          ↵
-        </button>
-      </div>
-
-      <!-- Main FAB Button with Keyboard Icon -->
-      <button id="btn-fab" title="Toggle navigation keyboard controls (Esc, Up, Down, Enter)" class="w-12 h-12 rounded-full bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] flex items-center justify-center shadow-xl shadow-black/60 border border-[#51afef]/60 transition duration-200 active:scale-95 cursor-pointer" aria-label="Toggle keyboard menu">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <rect x="2" y="4" width="20" height="16" rx="2.5" />
-          <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-    </div>
-
-    <!-- Create Session Modal -->
-    <div id="modal-overlay" class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div class="modal bg-[#21242b] border border-[#3f444a] rounded-xl p-5 w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl shadow-black/60">
-        <!-- Modal Header -->
-        <div class="modal-header flex items-center justify-between pb-3 mb-3 border-b border-[#3f444a]">
-          <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-[#51afef] shadow-sm shadow-[#51afef]"></span>
-            <h3 class="font-bold text-[#DFDFDF] text-base md:text-lg">Create New tmux Session</h3>
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body class="h-full w-full bg-[#282c34] text-[#bbc2cf] font-mono antialiased select-none overflow-hidden">
+    <div id="app-container" class="flex flex-col h-screen h-[100dvh] w-screen p-2 md:p-3 gap-2 relative">
+      <!-- Combined Top Control & Action Bar -->
+      <header
+        id="controls-bar"
+        class="flex flex-wrap items-center justify-between bg-[#21242b] border border-[#3f444a] rounded-lg px-2.5 py-1.5 md:px-3 md:py-2 gap-2 shadow-lg shadow-black/40"
+      >
+        <!-- Session Controls -->
+        <div class="session-controls flex items-center gap-1.5 flex-1 sm:flex-initial min-w-[200px]">
+          <label for="session-select" class="sr-only">Session:</label>
+          <div class="session-select-wrapper flex-1 relative min-w-[120px] max-w-xs">
+            <select
+              id="session-select"
+              title="Active tmux sessions"
+              class="w-full bg-[#1b2229] text-[#DFDFDF] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] rounded-md px-2.5 py-1.5 text-xs md:text-sm outline-none cursor-pointer transition"
+            >
+              <option value="">Loading sessions...</option>
+            </select>
           </div>
-          <button id="btn-close-modal" class="text-[#5B6268] hover:text-[#DFDFDF] text-xl leading-none px-1.5 py-0.5 rounded hover:bg-[#282c34] transition cursor-pointer" aria-label="Close modal">&times;</button>
+          <button
+            id="btn-kill-session"
+            title="Close/kill selected tmux session"
+            class="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[#282c34] border border-[#ff6c6b]/40 hover:bg-[#ff6c6b] hover:border-[#ff6c6b] text-[#ff6c6b] hover:text-[#1b2229] transition duration-150 cursor-pointer flex-shrink-0 text-xs md:text-sm font-bold"
+            aria-label="Kill Session"
+          >
+            ✕
+          </button>
+          <button
+            id="btn-open-modal"
+            class="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-sm shadow-black/40 cursor-pointer flex-shrink-0"
+          >
+            <span>+</span> New
+          </button>
         </div>
 
-        <form id="create-session-form" class="flex-1 overflow-y-auto pr-1 space-y-3.5">
-          <!-- Session Name -->
-          <div class="form-group flex flex-col gap-1.5">
-            <label for="new-session-name" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Session Name</label>
-            <input type="text" id="new-session-name" placeholder="e.g. agy-work" required pattern="[a-zA-Z0-9_\-\.]+" class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-md px-3 py-2 text-sm outline-none transition" />
-            <small class="text-[11px] text-[#5B6268]">Alphanumeric, underscores, hyphens only</small>
+        <!-- Connection Status -->
+        <div
+          class="connection-status flex items-center gap-2 bg-[#1b2229] border border-[#3f444a] px-2.5 py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0"
+        >
+          <span id="status-dot" class="dot disconnected"></span>
+          <span id="status-text" class="text-[#bbc2cf] text-xs max-w-[160px] sm:max-w-none truncate">Disconnected</span>
+        </div>
+      </header>
+
+      <!-- Terminal Container -->
+      <main
+        id="terminal-container"
+        class="flex-1 min-h-0 bg-[#1b2229] border border-[#3f444a] focus-within:border-[#51afef]/70 rounded-lg overflow-hidden p-1 relative shadow-inner"
+      >
+        <div id="terminal" class="w-full h-full"></div>
+
+        <!-- Empty Session State Overlay -->
+        <div
+          id="empty-session-state"
+          class="hidden absolute inset-0 bg-[#1b2229]/95 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center z-30"
+        >
+          <div class="w-14 h-14 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#51afef] shadow-lg shadow-black/40">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="M6 8l4 4-4 4M12 16h6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <h3 class="text-base font-bold text-[#DFDFDF] mb-1">No Active Sessions</h3>
+          <p class="text-xs text-[#5B6268] max-w-xs mb-4">
+            Start a new tmux session to begin running agy.
+          </p>
+          <button
+            id="btn-empty-new-session"
+            class="px-4 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
+          >
+            + Create Session
+          </button>
+        </div>
+      </main>
+
+      <!-- Toast Container -->
+      <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full px-4 sm:px-0"></div>
+
+      <!-- Floating Action Button (FAB) Speed Dial -->
+      <div id="fab-container" class="fixed bottom-8 right-8 z-40 flex flex-col items-center">
+        <!-- Speed dial sub-buttons: ESC, Up, Down, Enter (opened above keyboard FAB) -->
+        <div id="fab-menu" class="hidden flex flex-col items-center gap-2.5 mb-2.5 transition-all duration-200 ease-out origin-bottom">
+          <button
+            id="btn-fab-esc"
+            title="Send Escape (Esc)"
+            class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#ff6c6b] hover:bg-[#ff6c6b]/20 text-[#ff6c6b] flex items-center justify-center font-bold text-xs shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer"
+          >
+            ESC
+          </button>
+          <button
+            id="btn-fab-up"
+            title="Send Up Arrow (▲)"
+            class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#282c34] text-[#DFDFDF] hover:text-[#51afef] flex items-center justify-center font-bold text-sm shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer"
+          >
+            ▲
+          </button>
+          <button
+            id="btn-fab-down"
+            title="Send Down Arrow (▼)"
+            class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#282c34] text-[#DFDFDF] hover:text-[#51afef] flex items-center justify-center font-bold text-sm shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer"
+          >
+            ▼
+          </button>
+          <button
+            id="btn-fab-enter"
+            title="Send Enter (↵)"
+            class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#51afef] text-[#51afef] hover:text-[#1b2229] flex items-center justify-center font-bold text-base shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer"
+          >
+            ↵
+          </button>
+        </div>
+
+        <!-- Main FAB Button with Keyboard Icon -->
+        <button
+          id="btn-fab"
+          title="Toggle navigation keyboard controls (Esc, Up, Down, Enter)"
+          class="w-12 h-12 rounded-full bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] flex items-center justify-center shadow-xl shadow-black/60 border border-[#51afef]/60 transition duration-200 active:scale-95 cursor-pointer"
+          aria-label="Toggle keyboard menu"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="2" y="4" width="20" height="16" rx="2.5" />
+            <path
+              d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Create Session Modal -->
+      <div
+        id="modal-overlay"
+        class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      >
+        <div
+          class="modal bg-[#21242b] border border-[#3f444a] rounded-xl p-5 w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl shadow-black/60"
+        >
+          <!-- Modal Header -->
+          <div class="modal-header flex items-center justify-between pb-3 mb-3 border-b border-[#3f444a]">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#51afef] shadow-sm shadow-[#51afef]"></span>
+              <h3 class="font-bold text-[#DFDFDF] text-base md:text-lg">Create New tmux Session</h3>
+            </div>
+            <button
+              id="btn-close-modal"
+              class="text-[#5B6268] hover:text-[#DFDFDF] text-xl leading-none px-1.5 py-0.5 rounded hover:bg-[#282c34] transition cursor-pointer"
+              aria-label="Close modal"
+            >
+              &times;
+            </button>
           </div>
 
-          <!-- Starting Directory / Folder Picker -->
-          <div class="form-group flex flex-col gap-1.5">
-            <div class="form-label-row flex items-center justify-between gap-2">
-              <label for="new-session-cwd" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Starting Directory</label>
-              <span id="selected-cwd-display" class="cwd-badge text-xs text-[#51afef] bg-[#1b2229] border border-[#51afef]/40 px-2 py-0.5 rounded max-w-[240px] truncate font-mono"></span>
+          <form id="create-session-form" class="flex-1 overflow-y-auto pr-1 space-y-3.5">
+            <!-- Session Name -->
+            <div class="form-group flex flex-col gap-1.5">
+              <label for="new-session-name" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Session Name</label>
+              <input
+                type="text"
+                id="new-session-name"
+                placeholder="e.g. agy-work"
+                required
+                pattern="[a-zA-Z0-9_\-\.]+"
+                class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-md px-3 py-2 text-sm outline-none transition"
+              />
+              <small class="text-[11px] text-[#5B6268]">Alphanumeric, underscores, hyphens only</small>
             </div>
-            
-            <input type="hidden" id="new-session-cwd" />
 
-            <!-- Folder picker component with root tabs & 1-level folders -->
-            <div class="folder-picker-box bg-[#1b2229] border border-[#3f444a] rounded-md flex flex-col overflow-hidden">
-              <div id="picker-root-tabs" class="picker-root-tabs flex bg-[#21242b] border-b border-[#3f444a] overflow-x-auto"></div>
-              
-              <div class="picker-search-row p-2 border-b border-[#3f444a] bg-[#21242b]">
-                <input type="text" id="picker-search-input" placeholder="Search folders in selected root..." class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded px-2.5 py-1.5 text-xs outline-none transition" />
+            <!-- Starting Directory / Folder Picker -->
+            <div class="form-group flex flex-col gap-1.5">
+              <div class="form-label-row flex items-center justify-between gap-2">
+                <label for="new-session-cwd" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider"
+                  >Starting Directory</label
+                >
+                <span
+                  id="selected-cwd-display"
+                  class="cwd-badge text-xs text-[#51afef] bg-[#1b2229] border border-[#51afef]/40 px-2 py-0.5 rounded max-w-[240px] truncate font-mono"
+                ></span>
               </div>
 
-              <div id="picker-folder-list" class="picker-folder-list max-h-44 overflow-y-auto flex flex-col">
-                <div class="picker-loading text-xs text-[#5B6268] p-3 text-center">Loading allowed directories...</div>
+              <input type="hidden" id="new-session-cwd" />
+
+              <!-- Folder picker component with root tabs & 1-level folders -->
+              <div class="folder-picker-box bg-[#1b2229] border border-[#3f444a] rounded-md flex flex-col overflow-hidden">
+                <div id="picker-root-tabs" class="picker-root-tabs flex bg-[#21242b] border-b border-[#3f444a] overflow-x-auto"></div>
+
+                <div class="picker-search-row p-2 border-b border-[#3f444a] bg-[#21242b]">
+                  <input
+                    type="text"
+                    id="picker-search-input"
+                    placeholder="Search folders in selected root..."
+                    class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded px-2.5 py-1.5 text-xs outline-none transition"
+                  />
+                </div>
+
+                <div id="picker-folder-list" class="picker-folder-list max-h-44 overflow-y-auto flex flex-col">
+                  <div class="picker-loading text-xs text-[#5B6268] p-3 text-center">Loading allowed directories...</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Initial Command -->
-          <div class="form-group flex flex-col gap-1.5">
-            <label for="new-session-command" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Initial Command</label>
-            <input type="text" id="new-session-command" placeholder="agy" value="agy" class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-md px-3 py-2 text-sm outline-none transition font-mono" />
-            <small class="text-[11px] text-[#5B6268]">Command to execute in the new tmux window (default: agy)</small>
-          </div>
+            <!-- Initial Command -->
+            <div class="form-group flex flex-col gap-1.5">
+              <label for="new-session-command" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Initial Command</label>
+              <input
+                type="text"
+                id="new-session-command"
+                placeholder="agy"
+                value="agy"
+                class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-md px-3 py-2 text-sm outline-none transition font-mono"
+              />
+              <small class="text-[11px] text-[#5B6268]">Command to execute in the new tmux window (default: agy)</small>
+            </div>
 
-          <!-- Modal Actions -->
-          <div class="modal-actions flex items-center justify-end gap-2.5 pt-3 border-t border-[#3f444a]">
-            <button type="button" id="btn-cancel-modal" class="px-3.5 py-1.5 rounded-md bg-[#282c34] hover:bg-[#21242b] text-[#bbc2cf] text-xs md:text-sm font-medium border border-[#3f444a] transition cursor-pointer">
-              Cancel
-            </button>
-            <button type="submit" class="px-4 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer">
-              Create & Attach
-            </button>
-          </div>
-        </form>
+            <!-- Modal Actions -->
+            <div class="modal-actions flex items-center justify-end gap-2.5 pt-3 border-t border-[#3f444a]">
+              <button
+                type="button"
+                id="btn-cancel-modal"
+                class="px-3.5 py-1.5 rounded-md bg-[#282c34] hover:bg-[#21242b] text-[#bbc2cf] text-xs md:text-sm font-medium border border-[#3f444a] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="px-4 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
+              >
+                Create & Attach
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script type="module" src="/src/client/app.js"></script>
-</body>
+    <script type="module" src="/src/client/app.js"></script>
+  </body>
 </html>

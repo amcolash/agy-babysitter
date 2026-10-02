@@ -98,11 +98,20 @@ export function initTerminal(onInput, onResize) {
   });
   resizeObserver.observe(terminalContainer);
   window.addEventListener('resize', handleTerminalResize);
+
+  // Handle mobile virtual keyboard resize smoothly
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      handleTerminalResize();
+      setTimeout(() => term.scrollToBottom(), 50);
+    });
+  }
 }
 
 export function handleTerminalResize() {
   try {
     fitAddon.fit();
+    term.scrollToBottom();
     if (onResizeCallback && term.cols && term.rows) {
       onResizeCallback(term.cols, term.rows);
     }

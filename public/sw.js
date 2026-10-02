@@ -1,4 +1,4 @@
-const CACHE_NAME = 'agy-babysitter-v2';
+const CACHE_NAME = 'agy-babysitter-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -16,12 +16,22 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Ignore non-HTTP(S) schemes (e.g. chrome-extension://, moz-extension://)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return;
+  }
+
   // Never intercept API, WebSocket, or non-GET requests
   if (
     event.request.method !== 'GET' ||
     url.pathname.startsWith('/api') ||
     url.pathname.startsWith('/ws')
   ) {
+    return;
+  }
+
+  // Only handle same-origin requests
+  if (url.origin !== self.location.origin) {
     return;
   }
 
@@ -32,8 +42,8 @@ self.addEventListener('fetch', (event) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+            cache.put(event.request, responseToCache).catch(() => {});
+          }).catch(() => {});
         }
         return networkResponse;
       })
