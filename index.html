@@ -54,10 +54,12 @@
 
         <!-- Connection Status -->
         <div
-          class="connection-status flex items-center gap-2 bg-[#1b2229] border border-[#3f444a] px-2.5 py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0"
+          id="connection-status-box"
+          title="Disconnected"
+          class="connection-status flex items-center sm:gap-2 bg-[#1b2229] border border-[#3f444a] p-2 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0 cursor-default"
         >
           <span id="status-dot" class="dot disconnected"></span>
-          <span id="status-text" class="text-[#bbc2cf] text-xs max-w-[160px] sm:max-w-none truncate">Disconnected</span>
+          <span id="status-text" class="hidden sm:inline text-[#bbc2cf] text-xs max-w-[160px] sm:max-w-none truncate">Disconnected</span>
         </div>
       </header>
 

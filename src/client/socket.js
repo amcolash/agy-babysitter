@@ -2,6 +2,7 @@ import { term, fitAddon, writeTerminal, handleTerminalResize } from './terminal.
 
 const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
+const statusBox = document.getElementById('connection-status-box');
 
 let ws = null;
 let currentSession = null;
@@ -11,6 +12,7 @@ const RECONNECT_DELAY_MS = 3000;
 export function updateStatus(state, message) {
   statusDot.className = `dot ${state}`;
   statusText.textContent = message;
+  if (statusBox) statusBox.title = message;
 }
 
 export function getCurrentSession() {
