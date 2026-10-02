@@ -56,10 +56,10 @@ export function initTerminal(onInput, onResize) {
     if (onInput) onInput(data);
   });
 
-  // Mobile Touch Swipe Scrolling Support for Tmux
+  // Mobile Touch Swipe Scrolling Support
   let lastTouchY = 0;
   let accumulatedTouchDelta = 0;
-  const SWIPE_STEP_PX = 18;
+  const SWIPE_STEP_PX = 16;
 
   terminalContainer.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
@@ -71,23 +71,19 @@ export function initTerminal(onInput, onResize) {
   terminalContainer.addEventListener('touchmove', (e) => {
     if (e.touches.length === 1) {
       const currentY = e.touches[0].clientY;
-      const currentX = e.touches[0].clientX;
       const diffY = currentY - lastTouchY;
       lastTouchY = currentY;
       accumulatedTouchDelta += diffY;
 
       while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
-        const col = Math.max(1, Math.min(term.cols || 80, Math.floor(currentX / 9) || 1));
-        const row = Math.max(1, Math.min(term.rows || 24, Math.floor(currentY / 18) || 1));
-
         if (accumulatedTouchDelta > 0) {
-          // Swiping down -> scroll up in tmux history (SGR Wheel Up)
+          // Swiping down -> scroll up in terminal buffer
           accumulatedTouchDelta -= SWIPE_STEP_PX;
-          if (onInput) onInput(`\x1b[<64;${col};${row}M`);
+          term.scrollLines(-2);
         } else {
-          // Swiping up -> scroll down towards bottom (SGR Wheel Down)
+          // Swiping up -> scroll down towards bottom
           accumulatedTouchDelta += SWIPE_STEP_PX;
-          if (onInput) onInput(`\x1b[<65;${col};${row}M`);
+          term.scrollLines(2);
         }
       }
     }
@@ -106,6 +102,26 @@ export function initTerminal(onInput, onResize) {
       setTimeout(() => term.scrollToBottom(), 50);
     });
   }
+
+  // Automatic copy to clipboard when selecting text
+  term.onSelectionChange(() => {
+    const selectedText = term.getSelection();
+    if (selectedText && selectedText.length > 0 && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(selectedText).catch(() => {});
+    }
+  });
+
+  // Standard paste support (Ctrl+V / Cmd+V or right-click paste)
+  window.addEventListener('paste', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+    const pastedText = e.clipboardData?.getData('text');
+    if (pastedText && onInput) {
+      e.preventDefault();
+      onInput(pastedText);
+    }
+  });
 }
 
 export function handleTerminalResize() {

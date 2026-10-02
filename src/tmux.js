@@ -11,7 +11,10 @@ const execFileAsync = util.promisify(execFile);
 export async function ensureTmuxMouse() {
   try {
     await execFileAsync('tmux', ['set-option', '-g', 'mouse', 'on']);
+    await execFileAsync('tmux', ['set-option', '-s', 'set-clipboard', 'on']);
     await execFileAsync('tmux', ['set-option', '-g', 'history-limit', '50000']);
+    await execFileAsync('tmux', ['bind-key', '-T', 'copy-mode', 'MouseDragEnd1Pane', 'send-keys', '-X', 'copy-pipe-and-cancel']);
+    await execFileAsync('tmux', ['bind-key', '-T', 'copy-mode-vi', 'MouseDragEnd1Pane', 'send-keys', '-X', 'copy-pipe-and-cancel']);
   } catch (e) {
     // Ignore if tmux server is not running yet
   }
