@@ -5,15 +5,14 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n \"server,vite\" -c \"cyan,magenta\" \"node --watch src/server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
     "check": "node --check src/*.js src/routes/*.js src/client/*.js && vite build",
     "server": "node --watch src/server.js",
     "start": "node src/server.js",
     "stop": "pkill -f 'node.*src/server.js' 2>/dev/null || true",
-    "restart": "pkill -f 'node.*src/server.js' 2>/dev/null || true; sleep 0.3; node src/server.js",
-    "session": "zellij attach -c agy-main -- agy"
+    "restart": "node src/restart.js",
+    "session": "node src/cli.js"
   },
   "keywords": [
     "antigravity",
