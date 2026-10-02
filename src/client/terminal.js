@@ -52,16 +52,16 @@ term.loadAddon(webLinksAddon);
 let onResizeCallback = null;
 
 export function configureHelperTextarea() {
-  const helperTextarea = terminalEl.querySelector(".xterm-helper-textarea");
+  const helperTextarea = terminalEl.querySelector('.xterm-helper-textarea');
   if (helperTextarea) {
-    helperTextarea.setAttribute("autocorrect", "off");
-    helperTextarea.setAttribute("autocapitalize", "none");
-    helperTextarea.setAttribute("autocomplete", "off");
-    helperTextarea.setAttribute("spellcheck", "false");
-    helperTextarea.setAttribute("inputmode", "email");
-    helperTextarea.setAttribute("enterkeyhint", "enter");
-    helperTextarea.setAttribute("data-gramm", "false");
-    helperTextarea.setAttribute("data-enable-grammarly", "false");
+    helperTextarea.setAttribute('autocorrect', 'off');
+    helperTextarea.setAttribute('autocapitalize', 'none');
+    helperTextarea.setAttribute('autocomplete', 'off');
+    helperTextarea.setAttribute('spellcheck', 'false');
+    helperTextarea.setAttribute('inputmode', 'search');
+    helperTextarea.setAttribute('enterkeyhint', 'enter');
+    helperTextarea.setAttribute('data-gramm', 'false');
+    helperTextarea.setAttribute('data-enable-grammarly', 'false');
   }
 }
 
