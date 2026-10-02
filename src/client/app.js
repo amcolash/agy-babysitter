@@ -17,7 +17,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 }
 
-// Boot application data & initial tmux connection
+// Boot application data & initial zellij connection
 (async function boot() {
   await initInfo();
   await loadSessions();

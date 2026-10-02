@@ -32,7 +32,7 @@ if (typeof process.loadEnvFile === 'function') {
   }
 }
 
-function resolveTilde(p) {
+export function resolveTilde(p) {
   if (!p) return os.homedir();
   const trimmed = p.trim();
   if (trimmed === '~' || trimmed.startsWith('~/')) {

@@ -117,10 +117,21 @@ export function getWakelockStatus() {
 }
 
 // Cleanup on process termination
-process.on('exit', () => {
+function cleanupOnExit() {
   if (wakelockProcess) {
     try {
       wakelockProcess.kill('SIGTERM');
     } catch (e) {}
+    wakelockProcess = null;
   }
+}
+
+process.on('exit', cleanupOnExit);
+process.on('SIGINT', () => {
+  cleanupOnExit();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  cleanupOnExit();
+  process.exit(0);
 });

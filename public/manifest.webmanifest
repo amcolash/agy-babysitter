@@ -1,7 +1,7 @@
 {
   "name": "agy Babysitter",
   "short_name": "agy",
-  "description": "Remote persistent web terminal babysitter for agy tmux sessions",
+  "description": "Remote persistent web terminal babysitter for agy zellij sessions",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

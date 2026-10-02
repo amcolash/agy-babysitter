@@ -1,6 +1,6 @@
 import express from 'express';
 import path from 'path';
-import config from '../config.js';
+import config, { resolveTilde } from '../config.js';
 import { listSessions, createSession, killSession, getUniqueSessionName } from '../zellij.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { touchWakelock, getWakelockStatus } from '../wakelock.js';
@@ -12,7 +12,7 @@ router.get('/wakelock', (req, res) => {
   res.json(getWakelockStatus());
 });
 
-// API: List active tmux sessions
+// API: List active zellij sessions
 router.get('/sessions', async (req, res) => {
   try {
     const sessions = await listSessions();
@@ -22,11 +22,11 @@ router.get('/sessions', async (req, res) => {
   }
 });
 
-// API: Create a new tmux session
+// API: Create a new zellij session
 router.post('/sessions', async (req, res) => {
   try {
     const { name, command, cwd } = req.body;
-    const sessionCwd = cwd ? path.resolve(cwd.trim()) : config.DEFAULT_CWD;
+    const sessionCwd = cwd ? resolveTilde(cwd.trim()) : config.DEFAULT_CWD;
 
     if (!isAllowedDirectory(sessionCwd)) {
       return res.status(400).json({
@@ -43,7 +43,7 @@ router.post('/sessions', async (req, res) => {
   }
 });
 
-// API: Kill a tmux session
+// API: Kill a zellij session
 router.delete('/sessions/:name', async (req, res) => {
   try {
     const success = await killSession(req.params.name);
@@ -57,7 +57,7 @@ router.delete('/sessions/:name', async (req, res) => {
 // API: Suggest a unique session name for a directory path
 router.get('/suggest-session-name', async (req, res) => {
   try {
-    const targetCwd = req.query.cwd ? req.query.cwd.toString() : config.DEFAULT_CWD;
+    const targetCwd = req.query.cwd ? resolveTilde(req.query.cwd.toString()) : config.DEFAULT_CWD;
     const name = await getUniqueSessionName(targetCwd);
     res.json({ name });
   } catch (err) {

@@ -30,6 +30,21 @@ export function clearReconnectTimer() {
   }
 }
 
+export function disconnectTerminal() {
+  clearReconnectTimer();
+  if (ws) {
+    const oldWs = ws;
+    ws = null;
+    oldWs.onclose = null;
+    oldWs.onerror = null;
+    try {
+      oldWs.close();
+    } catch (e) {}
+  }
+  currentSession = null;
+  updateStatus('disconnected', 'Disconnected');
+}
+
 export function scheduleReconnect(sessionName) {
   if (reconnectTimer) return;
   const targetSession = sessionName || currentSession;

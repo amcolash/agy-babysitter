@@ -1,6 +1,6 @@
 import pty from 'node-pty';
-import config from './config.js';
-import { hasSession, createSession } from './zellij.js';
+import config, { resolveTilde } from './config.js';
+import { hasSession, createSession, sessionMeta } from './zellij.js';
 
 /**
  * Creates a PTY instance attached to a zellij session.
@@ -14,21 +14,25 @@ import { hasSession, createSession } from './zellij.js';
  */
 export async function attachToSession({
   sessionName = config.DEFAULT_SESSION,
-  cwd = config.DEFAULT_CWD,
-  command = config.DEFAULT_COMMAND,
+  cwd,
+  command,
   cols = 80,
   rows = 24
 } = {}) {
+  const meta = sessionMeta?.get(sessionName) || {};
+  const targetCwd = resolveTilde(cwd || meta.cwd || config.DEFAULT_CWD);
+  const targetCommand = command || meta.command || config.DEFAULT_COMMAND;
+
   const exists = await hasSession(sessionName);
   if (!exists) {
-    await createSession({ name: sessionName, cwd, command });
+    await createSession({ name: sessionName, cwd: targetCwd, command: targetCommand });
   }
 
-  const ptyProcess = pty.spawn('zellij', ['attach', '-c', sessionName, '--', 'bash', '-c', command || 'agy'], {
+  const ptyProcess = pty.spawn('zellij', ['attach', '-c', sessionName, '--', 'bash', '-c', targetCommand || 'agy'], {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
-    cwd: cwd || config.DEFAULT_CWD,
+    cwd: targetCwd,
     env: {
       ...process.env,
       TERM: 'xterm-256color'

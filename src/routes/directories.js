@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import config from '../config.js';
+import config, { resolveTilde } from '../config.js';
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ export function formatDisplayPath(fullPath) {
  */
 export function isAllowedDirectory(targetPath) {
   if (!targetPath) return false;
-  const resolved = path.resolve(targetPath);
+  const resolved = resolveTilde(targetPath);
 
   // Don't allow hidden folders
   const baseName = path.basename(resolved);
@@ -36,7 +36,7 @@ export function isAllowedDirectory(targetPath) {
   }
 
   for (const allowedRoot of config.ALLOWED_DIRECTORIES) {
-    const resolvedRoot = path.resolve(allowedRoot);
+    const resolvedRoot = resolveTilde(allowedRoot);
     // Direct 1-level child only (not the root itself)
     const parent = path.dirname(resolved);
     if (parent === resolvedRoot) {
@@ -64,7 +64,7 @@ router.get('/directories', async (req, res) => {
     const roots = [];
 
     for (const rootPath of config.ALLOWED_DIRECTORIES) {
-      const resolvedRoot = path.resolve(rootPath);
+      const resolvedRoot = resolveTilde(rootPath);
       const displayRoot = formatDisplayPath(resolvedRoot);
 
       try {
@@ -72,17 +72,29 @@ router.get('/directories', async (req, res) => {
         if (!stats.isDirectory()) continue;
 
         const entries = await fs.promises.readdir(resolvedRoot, { withFileTypes: true });
-        const folders = entries
-          .filter((entry) => {
-            // Only 1-level non-hidden directories, excluding node_modules
-            return entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules';
-          })
-          .map((entry) => ({
-            name: entry.name,
-            path: path.join(resolvedRoot, entry.name),
-            displayPath: formatDisplayPath(path.join(resolvedRoot, entry.name))
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        const folders = [];
+
+        for (const entry of entries) {
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+
+          let isDir = entry.isDirectory();
+          if (!isDir && entry.isSymbolicLink()) {
+            try {
+              const targetStat = await fs.promises.stat(path.join(resolvedRoot, entry.name));
+              isDir = targetStat.isDirectory();
+            } catch (e) {}
+          }
+
+          if (isDir) {
+            folders.push({
+              name: entry.name,
+              path: path.join(resolvedRoot, entry.name),
+              displayPath: formatDisplayPath(path.join(resolvedRoot, entry.name))
+            });
+          }
+        }
+
+        folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
         roots.push({
           name: displayRoot,

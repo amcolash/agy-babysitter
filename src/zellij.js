@@ -1,10 +1,63 @@
 import { execFile } from 'child_process';
 import util from 'util';
 import path from 'path';
-import config from './config.js';
+import fs from 'fs';
+import os from 'os';
+import config, { resolveTilde } from './config.js';
 
 const execFileAsync = util.promisify(execFile);
-const sessionMeta = new Map();
+export const sessionMeta = new Map();
+
+// Session meta cache file path
+const CACHE_DIR = path.join(os.tmpdir(), 'agy-babysitter');
+const META_FILE = path.join(CACHE_DIR, 'sessions-meta.json');
+
+function loadMetaCache() {
+  try {
+    if (fs.existsSync(META_FILE)) {
+      const data = JSON.parse(fs.readFileSync(META_FILE, 'utf-8'));
+      for (const [key, val] of Object.entries(data)) {
+        if (!sessionMeta.has(key)) {
+          sessionMeta.set(key, val);
+        }
+      }
+    }
+  } catch (e) {}
+}
+
+function saveMetaCache() {
+  try {
+    if (!fs.existsSync(CACHE_DIR)) {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    const obj = Object.fromEntries(sessionMeta);
+    fs.writeFileSync(META_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+  } catch (e) {}
+}
+
+// Initial load
+loadMetaCache();
+
+/**
+ * Infer CWD from session name if not in metadata cache
+ * @param {string} sessionName
+ * @returns {string}
+ */
+function inferCwdFromSessionName(sessionName) {
+  if (!sessionName) return config.DEFAULT_CWD;
+
+  // Strip trailing -2, -3, etc. for matching
+  const base = sessionName.replace(/-\d+$/, '');
+
+  for (const root of config.ALLOWED_DIRECTORIES) {
+    const candidate = path.join(root, base);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return config.DEFAULT_CWD;
+}
 
 /**
  * Sanitize a string to be a valid zellij session name
@@ -21,6 +74,7 @@ export function sanitizeSessionName(name) {
  * @returns {Promise<Array<{name: string, created: string, attached: boolean, path: string}>>}
  */
 export async function listSessions() {
+  loadMetaCache();
   try {
     const { stdout } = await execFileAsync('zellij', ['list-sessions', '-n']);
     const lines = stdout.trim().split('\n');
@@ -37,19 +91,22 @@ export async function listSessions() {
 
       const isExited = line.includes('EXITED') || line.includes('DEAD');
       if (isExited) {
-        // Clean up dead session in background
-        execFileAsync('zellij', ['delete-session', sessionName]).catch(() => {});
+        // Clean up dead session in background with force flag
+        sessionMeta.delete(sessionName);
+        saveMetaCache();
+        execFileAsync('zellij', ['delete-session', '-f', sessionName]).catch(() => {});
         continue;
       }
 
       const isAttached = line.includes('ATTACHED') || line.includes('Active');
       const meta = sessionMeta.get(sessionName) || {};
+      const sessionPath = meta.cwd || inferCwdFromSessionName(sessionName);
 
       sessions.push({
         name: sessionName,
         created: new Date().toISOString(),
         attached: isAttached,
-        path: meta.cwd || config.DEFAULT_CWD
+        path: sessionPath
       });
     }
 
@@ -103,7 +160,7 @@ export async function getUniqueSessionName(cwdOrName) {
  * @returns {Promise<{name: string, created: boolean, message?: string}>}
  */
 export async function createSession({ name, command, cwd }) {
-  const sessionCwd = (cwd || config.DEFAULT_CWD).trim();
+  const sessionCwd = resolveTilde((cwd || config.DEFAULT_CWD).trim());
   const sessionCommand = (command || config.DEFAULT_COMMAND).trim() || 'agy';
 
   let sessionName = name ? sanitizeSessionName(name) : sanitizeSessionName(path.basename(sessionCwd));
@@ -119,6 +176,7 @@ export async function createSession({ name, command, cwd }) {
   });
 
   sessionMeta.set(sessionName, { cwd: sessionCwd, command: sessionCommand });
+  saveMetaCache();
   return { name: sessionName, created: true, message: 'Session created successfully' };
 }
 
@@ -131,8 +189,8 @@ export async function killSession(name) {
   if (!name) return false;
   try {
     sessionMeta.delete(name);
-    await execFileAsync('zellij', ['kill-session', name]).catch(() => {});
-    await execFileAsync('zellij', ['delete-session', name]).catch(() => {});
+    saveMetaCache();
+    await execFileAsync('zellij', ['delete-session', '-f', name]).catch(() => {});
     return true;
   } catch (err) {
     return false;
@@ -140,6 +198,7 @@ export async function killSession(name) {
 }
 
 export default {
+  sessionMeta,
   sanitizeSessionName,
   listSessions,
   hasSession,

@@ -42,14 +42,16 @@ export function setupWebSocketServer(server) {
 
       ptyProcess.onExit(({ exitCode, signal }) => {
         if (!isClosed && ws.readyState === WebSocket.OPEN) {
-          ws.close(1000, `PTY exited (code: ${exitCode}, signal: ${signal})`);
+          const reason = `PTY exited (code: ${exitCode}, signal: ${signal})`.slice(0, 120);
+          ws.close(1000, reason);
         }
       });
     } catch (err) {
       console.error('Failed to attach to session:', err);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(`\r\n\x1b[31m[Error attaching to session '${sessionName}': ${err.message}]\x1b[0m\r\n`);
-        ws.close(1011, err.message);
+        const closeReason = (err.message || 'Error attaching to session').slice(0, 120);
+        ws.close(1011, closeReason);
       }
       return;
     }

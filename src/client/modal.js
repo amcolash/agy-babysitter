@@ -55,9 +55,17 @@ export async function loadAllowedDirectories() {
     const allFolders = allowedRoots.flatMap((r) => r.folders || []);
     const isValidSelected = allFolders.some((f) => f.path === selectedCwd);
 
-    if (!isValidSelected) {
-      const activeFolders = allowedRoots[activeRootIndex]?.folders || [];
-      const firstFolder = activeFolders[0] || allFolders[0];
+    if (isValidSelected) {
+      const rootIdx = allowedRoots.findIndex((r) => (r.folders || []).some((f) => f.path === selectedCwd));
+      if (rootIdx !== -1) {
+        activeRootIndex = rootIdx;
+      }
+    } else {
+      // Find first root with at least one folder, or fallback to 0
+      const firstNonEmptyRootIdx = allowedRoots.findIndex((r) => (r.folders || []).length > 0);
+      activeRootIndex = firstNonEmptyRootIdx !== -1 ? firstNonEmptyRootIdx : 0;
+
+      const firstFolder = allowedRoots[activeRootIndex]?.folders?.[0] || allFolders[0];
       if (firstFolder) {
         setSelectedCwd(firstFolder.path, firstFolder.displayPath || firstFolder.name, firstFolder.name);
       } else {
@@ -156,6 +164,12 @@ export function initModal() {
 
   modalOverlay.addEventListener('click', (e) => {
     if (e.target === modalOverlay) closeModal();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modalOverlay.classList.contains('hidden')) {
+      closeModal();
+    }
   });
 
   pickerSearchInput.addEventListener('input', () => {

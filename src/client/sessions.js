@@ -1,5 +1,5 @@
 import { writeTerminal } from './terminal.js';
-import { connectTerminal, getCurrentSession, setCurrentSession, clearReconnectTimer } from './socket.js';
+import { connectTerminal, disconnectTerminal, getCurrentSession, setCurrentSession, clearReconnectTimer } from './socket.js';
 import { showToast } from './toast.js';
 import { openModal } from './modal.js';
 
@@ -47,6 +47,17 @@ export function syncSessionToStorageAndUrl(sessionName) {
   } catch (e) {}
 }
 
+export function clearSessionFromStorageAndUrl() {
+  try {
+    localStorage.removeItem('agy_selected_session');
+    const url = new URL(window.location);
+    if (url.searchParams.has('session')) {
+      url.searchParams.delete('session');
+      window.history.replaceState(null, '', url);
+    }
+  } catch (e) {}
+}
+
 export function updateEmptyState(hasSessions) {
   if (emptySessionState) {
     if (hasSessions) {
@@ -72,14 +83,17 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
       defaultOption.value = '';
       defaultOption.textContent = 'No active sessions';
       sessionSelect.appendChild(defaultOption);
-    } else {
-      activeSessionsList.forEach((s) => {
-        const option = document.createElement('option');
-        option.value = s.name;
-        option.textContent = `${s.name} [${s.path || 'default'}]${s.attached ? ' (attached)' : ''}`;
-        sessionSelect.appendChild(option);
-      });
+      clearSessionFromStorageAndUrl();
+      disconnectTerminal();
+      return;
     }
+
+    activeSessionsList.forEach((s) => {
+      const option = document.createElement('option');
+      option.value = s.name;
+      option.textContent = `${s.name} [${s.path || 'default'}]${s.attached ? ' (attached)' : ''}`;
+      sessionSelect.appendChild(option);
+    });
 
     // Determine target session: explicit > URL param > localStorage > first available
     const urlParams = new URLSearchParams(window.location.search);
@@ -144,8 +158,7 @@ export function initSessions() {
         showToast(`Terminated session '${targetSession}'`, 'info');
         writeTerminal(`\r\n\x1b[33m[Session '${targetSession}' terminated]\x1b[0m\r\n`);
         if (getCurrentSession() === targetSession) {
-          clearReconnectTimer();
-          setCurrentSession(null);
+          disconnectTerminal();
         }
         await loadSessions();
       } else {

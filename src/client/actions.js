@@ -1,6 +1,7 @@
 import { sendAction, sendInput } from './socket.js';
 import { term } from './terminal.js';
 
+const fabContainer = document.getElementById('fab-container');
 const btnFab = document.getElementById('btn-fab');
 const fabMenu = document.getElementById('fab-menu');
 const btnFabEsc = document.getElementById('btn-fab-esc');
@@ -36,6 +37,13 @@ export function initActions() {
       toggleFabMenu();
     });
   }
+
+  // Close FAB menu on outside click
+  document.addEventListener('click', (e) => {
+    if (isFabOpen && fabContainer && !fabContainer.contains(e.target)) {
+      toggleFabMenu(false);
+    }
+  });
 
   // FAB 4 speed-dial buttons (Esc, Up, Down, Enter)
   if (btnFabEsc) {
