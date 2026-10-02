@@ -131,7 +131,7 @@ export function initSessions() {
       return;
     }
 
-    const confirmed = confirm(`Are you sure you want to terminate tmux session '${targetSession}'?`);
+    const confirmed = confirm(`Are you sure you want to terminate session '${targetSession}'?`);
     if (!confirmed) return;
 
     try {

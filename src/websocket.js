@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
-import { attachToTmuxSession } from './ptyManager.js';
+import { attachToSession } from './ptyManager.js';
 import { touchWakelock } from './wakelock.js';
 
 /**
@@ -26,7 +26,7 @@ export function setupWebSocketServer(server) {
     let isClosed = false;
 
     try {
-      ptyProcess = await attachToTmuxSession({
+      ptyProcess = await attachToSession({
         sessionName,
         cols,
         rows
@@ -46,9 +46,9 @@ export function setupWebSocketServer(server) {
         }
       });
     } catch (err) {
-      console.error('Failed to attach to tmux session:', err);
+      console.error('Failed to attach to session:', err);
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(`\r\n\x1b[31m[Error attaching to tmux session '${sessionName}': ${err.message}]\x1b[0m\r\n`);
+        ws.send(`\r\n\x1b[31m[Error attaching to session '${sessionName}': ${err.message}]\x1b[0m\r\n`);
         ws.close(1011, err.message);
       }
       return;

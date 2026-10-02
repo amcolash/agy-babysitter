@@ -30,7 +30,7 @@
           <div class="session-select-wrapper flex-1 relative min-w-[120px] max-w-xs">
             <select
               id="session-select"
-              title="Active tmux sessions"
+              title="Active sessions"
               class="w-full bg-[#1b2229] text-[#DFDFDF] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] rounded-md px-2.5 py-1.5 text-xs md:text-sm outline-none cursor-pointer transition"
             >
               <option value="">Loading sessions...</option>
@@ -38,7 +38,7 @@
           </div>
           <button
             id="btn-kill-session"
-            title="Close/kill selected tmux session"
+            title="Close/kill selected session"
             class="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[#282c34] border border-[#ff6c6b]/40 hover:bg-[#ff6c6b] hover:border-[#ff6c6b] text-[#ff6c6b] hover:text-[#1b2229] transition duration-150 cursor-pointer flex-shrink-0 text-xs md:text-sm font-bold"
             aria-label="Kill Session"
           >
@@ -83,7 +83,7 @@
           </div>
           <h3 class="text-base font-bold text-[#DFDFDF] mb-1">No Active Sessions</h3>
           <p class="text-xs text-[#5B6268] max-w-xs mb-4">
-            Start a new tmux session to begin running agy.
+            Start a new session to begin running agy.
           </p>
           <button
             id="btn-empty-new-session"
@@ -161,7 +161,7 @@
           <div class="modal-header flex items-center justify-between pb-3 mb-3 border-b border-[#3f444a]">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-[#51afef] shadow-sm shadow-[#51afef]"></span>
-              <h3 class="font-bold text-[#DFDFDF] text-base md:text-lg">Create New tmux Session</h3>
+              <h3 class="font-bold text-[#DFDFDF] text-base md:text-lg">Create New Session</h3>
             </div>
             <button
               id="btn-close-modal"
@@ -230,7 +230,7 @@
                 value="agy"
                 class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-md px-3 py-2 text-sm outline-none transition font-mono"
               />
-              <small class="text-[11px] text-[#5B6268]">Command to execute in the new tmux window (default: agy)</small>
+              <small class="text-[11px] text-[#5B6268]">Command to execute in the new session (default: agy)</small>
             </div>
 
             <!-- Modal Actions -->

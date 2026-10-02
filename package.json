@@ -1,7 +1,7 @@
 {
   "name": "agy-babysitter",
   "version": "1.0.0",
-  "description": "Remote web terminal babysitter for agy with tmux persistence",
+  "description": "Remote web terminal babysitter for agy with zellij session persistence",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
@@ -11,12 +11,14 @@
     "check": "node --check src/*.js src/routes/*.js src/client/*.js public/sw.js && vite build",
     "server": "node --watch src/server.js",
     "start": "node src/server.js",
-    "session": "tmux attach-session -t agy-main || tmux new-session -s agy-main agy"
+    "stop": "pkill -f 'node.*src/server.js' 2>/dev/null || true",
+    "restart": "pkill -f 'node.*src/server.js' 2>/dev/null || true; sleep 0.3; node src/server.js",
+    "session": "zellij attach -c agy-main -- agy"
   },
   "keywords": [
     "antigravity",
     "agy",
-    "tmux",
+    "zellij",
     "xterm",
     "babysitter"
   ],

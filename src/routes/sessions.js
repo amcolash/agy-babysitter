@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import config from '../config.js';
-import { listSessions, createSession, killSession, getUniqueSessionName } from '../tmux.js';
+import { listSessions, createSession, killSession, getUniqueSessionName } from '../zellij.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { touchWakelock, getWakelockStatus } from '../wakelock.js';
 

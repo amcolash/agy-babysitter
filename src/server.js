@@ -7,11 +7,7 @@ import config from './config.js';
 import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
 import { setupWebSocketServer, setupAssetWatcher } from './websocket.js';
-import { ensureTmuxMouse } from './tmux.js';
 import { touchWakelock } from './wakelock.js';
-
-// Ensure tmux server has mouse scrolling enabled
-ensureTmuxMouse();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
