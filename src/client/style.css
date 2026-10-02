@@ -172,20 +172,24 @@ html, body {
 /* Terminal container & xterm styling */
 #terminal-container {
   min-height: 0;
+  touch-action: none;
 }
 
 #terminal {
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
 
 .xterm {
   padding: 6px;
   height: 100%;
+  touch-action: none;
 }
 
 .xterm .xterm-viewport {
   overflow-y: auto;
+  touch-action: none;
 }
 
 /* Modal Overlay Transitions */

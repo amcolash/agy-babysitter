@@ -4,17 +4,17 @@ import { initSessions, loadSessions } from './sessions.js';
 import { initModal, initInfo } from './modal.js';
 import { initActions } from './actions.js';
 
+import { registerSW } from 'virtual:pwa-register';
+
 // Initialize all UI subsystems
 initTerminal(sendInput, sendResize);
 initSessions();
 initModal();
 initActions();
 
-// Register service worker for PWA installability
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+// Auto-updating PWA service worker
+if (import.meta.env.PROD) {
+  registerSW({ immediate: true });
 }
 
 // Boot application data & initial zellij connection

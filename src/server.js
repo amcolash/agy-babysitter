@@ -30,7 +30,7 @@ app.use('/api', directoriesRouter);
 app.use('/api', sessionsRouter);
 
 // SPA fallback route
-app.get('*', (req, res, next) => {
+app.get('{*path}', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/ws')) {
     return next();
   }

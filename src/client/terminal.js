@@ -5,10 +5,13 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 const terminalContainer = document.getElementById('terminal-container');
 const terminalEl = document.getElementById('terminal');
 
+const savedFontSize = parseInt(localStorage.getItem('agy_terminal_font_size'), 10);
+const initialFontSize = (savedFontSize >= 8 && savedFontSize <= 36) ? savedFontSize : 14;
+
 export const term = new Terminal({
   cursorBlink: true,
   cursorStyle: 'block',
-  fontSize: 14,
+  fontSize: initialFontSize,
   fontFamily: '"SauceCodePro Nerd Font Mono", "SauceCodePro Nerd Font", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
   theme: {
     foreground: '#bbc2cf',
@@ -56,52 +59,129 @@ export function initTerminal(onInput, onResize) {
     if (onInput) onInput(data);
   });
 
-  // Mobile Touch Swipe Scrolling Support
+  // Mobile Touch Swipe Scrolling & Pinch-to-Zoom Support
   let lastTouchY = 0;
+  let lastTouchX = 0;
   let accumulatedTouchDelta = 0;
-  const SWIPE_STEP_PX = 16;
+  const SWIPE_STEP_PX = 14;
+
+  let initialPinchDistance = null;
+  let initialPinchFontSize = initialFontSize;
+
+  function getPinchDistance(touches) {
+    if (touches.length < 2) return null;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
 
   terminalContainer.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
       lastTouchY = e.touches[0].clientY;
+      lastTouchX = e.touches[0].clientX;
       accumulatedTouchDelta = 0;
+      initialPinchDistance = null;
+    } else if (e.touches.length === 2) {
+      initialPinchDistance = getPinchDistance(e.touches);
+      initialPinchFontSize = term.options.fontSize || 14;
     }
-  }, { passive: true });
+  }, { passive: false });
 
   terminalContainer.addEventListener('touchmove', (e) => {
+    // Two-finger Pinch to Zoom / Font Resize on mobile
+    if (e.touches.length === 2 && initialPinchDistance) {
+      e.preventDefault();
+      const currentDistance = getPinchDistance(e.touches);
+      if (currentDistance && initialPinchDistance > 0) {
+        const ratio = currentDistance / initialPinchDistance;
+        const newFontSize = Math.min(32, Math.max(8, Math.round(initialPinchFontSize * ratio)));
+        if (newFontSize !== term.options.fontSize) {
+          term.options.fontSize = newFontSize;
+          localStorage.setItem('agy_terminal_font_size', String(newFontSize));
+          handleTerminalResize();
+        }
+      }
+      return;
+    }
+
+    // Single finger swipe scrolling
     if (e.touches.length === 1) {
+      e.preventDefault();
       const currentY = e.touches[0].clientY;
+      const currentX = e.touches[0].clientX;
       const diffY = currentY - lastTouchY;
       lastTouchY = currentY;
+      lastTouchX = currentX;
       accumulatedTouchDelta += diffY;
 
       while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
+        const col = Math.max(1, Math.min(term.cols || 80, Math.floor(currentX / 9) || 1));
+        const row = Math.max(1, Math.min(term.rows || 24, Math.floor(currentY / 18) || 1));
+
         if (accumulatedTouchDelta > 0) {
-          // Swiping down -> scroll up in terminal buffer
+          // Swiping down -> scroll up in terminal buffer / zellij history (SGR Wheel Up)
           accumulatedTouchDelta -= SWIPE_STEP_PX;
+          if (onInput) onInput(`\x1b[<64;${col};${row}M`);
           term.scrollLines(-2);
         } else {
-          // Swiping up -> scroll down towards bottom
+          // Swiping up -> scroll down towards bottom (SGR Wheel Down)
           accumulatedTouchDelta += SWIPE_STEP_PX;
+          if (onInput) onInput(`\x1b[<65;${col};${row}M`);
           term.scrollLines(2);
         }
       }
     }
+  }, { passive: false });
+
+  terminalContainer.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) {
+      initialPinchDistance = null;
+    }
   }, { passive: true });
+
+  const appContainer = document.getElementById('app-container');
+
+  function updateAppViewportHeight() {
+    if (window.visualViewport && appContainer) {
+      const vh = window.visualViewport.height;
+      appContainer.style.height = `${vh}px`;
+      window.scrollTo(0, 0);
+    }
+    handleTerminalResize();
+    setTimeout(() => term.scrollToBottom(), 50);
+  }
+
+  // Handle mobile virtual keyboard resize smoothly
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateAppViewportHeight);
+    window.visualViewport.addEventListener('scroll', () => {
+      window.scrollTo(0, 0);
+    });
+  }
 
   const resizeObserver = new ResizeObserver(() => {
     requestAnimationFrame(handleTerminalResize);
   });
   resizeObserver.observe(terminalContainer);
-  window.addEventListener('resize', handleTerminalResize);
+  window.addEventListener('resize', updateAppViewportHeight);
 
-  // Handle mobile virtual keyboard resize smoothly
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      handleTerminalResize();
-      setTimeout(() => term.scrollToBottom(), 50);
+  // Re-fit when device orientation changes
+  window.addEventListener('orientationchange', () => {
+    setTimeout(updateAppViewportHeight, 100);
+    setTimeout(updateAppViewportHeight, 300);
+  });
+
+  // Re-fit when fonts finish downloading
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      setTimeout(handleTerminalResize, 50);
     });
   }
+
+  // Ensure terminal receives focus and opens keyboard on click
+  terminalContainer.addEventListener('click', () => {
+    term.focus();
+  });
 
   // Automatic copy to clipboard when selecting text
   term.onSelectionChange(() => {

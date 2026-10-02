@@ -2,10 +2,16 @@
 <html lang="en" class="h-full bg-[#282c34]">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>agy Babysitter</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>agy</title>
 
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="darkreader-lock" />
+    <meta name="color-scheme" content="only dark" />
+
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="theme-color" content="#21242b" />
@@ -75,16 +81,16 @@
           id="empty-session-state"
           class="hidden absolute inset-0 bg-[#1b2229]/95 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center z-30"
         >
-          <div class="w-14 h-14 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#51afef] shadow-lg shadow-black/40">
+          <div
+            class="w-14 h-14 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#51afef] shadow-lg shadow-black/40"
+          >
             <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <rect x="2" y="4" width="20" height="16" rx="2" />
               <path d="M6 8l4 4-4 4M12 16h6" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </div>
           <h3 class="text-base font-bold text-[#DFDFDF] mb-1">No Active Sessions</h3>
-          <p class="text-xs text-[#5B6268] max-w-xs mb-4">
-            Start a new session to begin running agy.
-          </p>
+          <p class="text-xs text-[#5B6268] max-w-xs mb-4">Start a new session to begin running agy.</p>
           <button
             id="btn-empty-new-session"
             class="px-4 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"

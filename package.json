@@ -8,7 +8,7 @@
     "dev": "concurrently -k -n \"server,vite\" -c \"cyan,magenta\" \"node --watch src/server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "node --check src/*.js src/routes/*.js src/client/*.js public/sw.js && vite build",
+    "check": "node --check src/*.js src/routes/*.js src/client/*.js && vite build",
     "server": "node --watch src/server.js",
     "start": "node src/server.js",
     "stop": "pkill -f 'node.*src/server.js' 2>/dev/null || true",
@@ -37,6 +37,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "concurrently": "^10.0.5",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.2"
+    "vite": "^8.3.2",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }
