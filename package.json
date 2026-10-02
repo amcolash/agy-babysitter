@@ -1,0 +1,40 @@
+{
+  "name": "agy-babysitter",
+  "version": "1.0.0",
+  "description": "Remote web terminal babysitter for agy with tmux persistence",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n \"server,vite\" -c \"cyan,magenta\" \"node --watch src/server.js\" \"vite\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "session": "tmux attach-session -t agy-main || tmux new-session -s agy-main agy"
+  },
+  "keywords": [
+    "antigravity",
+    "agy",
+    "tmux",
+    "xterm",
+    "babysitter"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "express": "^5.2.1",
+    "node-pty": "^1.1.0",
+    "ws": "^8.22.0",
+    "xterm": "^5.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "concurrently": "^10.0.5",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.2"
+  }
+}

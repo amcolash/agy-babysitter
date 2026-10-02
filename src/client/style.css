@@ -1,0 +1,278 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+/* Sauce Code Pro Nerd Font Definitions */
+@font-face {
+  font-family: 'SauceCodePro Nerd Font';
+  src: url('/fonts/SauceCodeProNerdFont-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SauceCodePro Nerd Font';
+  src: url('/fonts/SauceCodeProNerdFont-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SauceCodePro Nerd Font';
+  src: url('/fonts/SauceCodeProNerdFont-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SauceCodePro Nerd Font';
+  src: url('/fonts/SauceCodeProNerdFont-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SauceCodePro Nerd Font Mono';
+  src: url('/fonts/SauceCodeProNerdFontMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SauceCodePro Nerd Font Mono';
+  src: url('/fonts/SauceCodeProNerdFontMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Doom One Theme Design Tokens */
+@theme {
+  --font-sans: 'SauceCodePro Nerd Font', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'SauceCodePro Nerd Font Mono', 'SauceCodePro Nerd Font', monospace;
+
+  --color-doom-bg: #282c34;
+  --color-doom-bg-alt: #21242b;
+  --color-doom-bg-dark: #1b2229;
+  --color-doom-surface: #21242b;
+  --color-doom-card: #23272e;
+  --color-doom-border: #3f444a;
+  --color-doom-border-light: #5B6268;
+  --color-doom-fg: #bbc2cf;
+  --color-doom-fg-light: #DFDFDF;
+  --color-doom-fg-dark: #5B6268;
+  --color-doom-blue: #51afef;
+  --color-doom-blue-hover: #46D9FF;
+  --color-doom-blue-muted: #2257a0;
+  --color-doom-green: #98be65;
+  --color-doom-green-hover: #99bb66;
+  --color-doom-red: #ff6c6b;
+  --color-doom-red-hover: #ff6655;
+  --color-doom-yellow: #ECBE7B;
+  --color-doom-orange: #da8548;
+  --color-doom-magenta: #c678dd;
+  --color-doom-cyan: #46D9FF;
+  --color-doom-violet: #a9a1e1;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-doom-bg);
+  color: var(--color-doom-fg);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app-container {
+  height: 100vh;
+  height: 100dvh;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-left: max(0.5rem, env(safe-area-inset-left));
+  padding-right: max(0.5rem, env(safe-area-inset-right));
+}
+
+/* Portrait mobile devices: extra bottom padding for gesture bar and floating FAB */
+@media (orientation: portrait) and (max-width: 768px) {
+  #app-container {
+    padding-bottom: calc(max(1.25rem, env(safe-area-inset-bottom)) + 0.5rem);
+  }
+
+  #fab-container {
+    bottom: calc(max(1.25rem, env(safe-area-inset-bottom)) + 0.5rem);
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #21242b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f444a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #51afef;
+}
+
+/* Connection Status Dot Animations */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dot.connected {
+  background-color: #98be65;
+  box-shadow: 0 0 10px rgba(152, 190, 101, 0.8), 0 0 2px #98be65;
+}
+
+.dot.disconnected {
+  background-color: #ff6c6b;
+  box-shadow: 0 0 8px rgba(255, 108, 107, 0.6);
+}
+
+.dot.connecting {
+  background-color: #ECBE7B;
+  box-shadow: 0 0 8px rgba(236, 190, 123, 0.6);
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.3; transform: scale(0.9); }
+}
+
+/* Terminal container & xterm styling */
+#terminal-container {
+  min-height: 0;
+}
+
+#terminal {
+  width: 100%;
+  height: 100%;
+}
+
+.xterm {
+  padding: 6px;
+  height: 100%;
+}
+
+.xterm .xterm-viewport {
+  overflow-y: auto;
+}
+
+/* Modal Overlay Transitions */
+.modal-overlay {
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.modal-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: none;
+}
+
+/* Folder Picker Dynamic Styling */
+.root-tab {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #5B6268;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.root-tab:hover {
+  color: #bbc2cf;
+  background-color: rgba(81, 175, 239, 0.08);
+}
+
+.root-tab.active {
+  color: #51afef;
+  border-bottom-color: #51afef;
+  background-color: rgba(81, 175, 239, 0.12);
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 0.84rem;
+  color: #bbc2cf;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color 0.12s, color 0.12s;
+  border-left: 3px solid transparent;
+}
+
+.picker-item:hover {
+  background-color: #21242b;
+  color: #DFDFDF;
+}
+
+.picker-item.active {
+  background-color: rgba(81, 175, 239, 0.15);
+  border-left-color: #51afef;
+  color: #46D9FF;
+}
+
+.picker-item-icon {
+  font-size: 0.95rem;
+  color: #51afef;
+}
+
+.picker-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-check {
+  font-size: 0.85rem;
+  color: #51afef;
+  font-weight: bold;
+}
+
+.picker-empty, .picker-loading {
+  padding: 16px;
+  font-size: 0.82rem;
+  color: #5B6268;
+  text-align: center;
+}

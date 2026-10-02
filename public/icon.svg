@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#282c34" />
+      <stop offset="100%" stop-color="#1b2229" />
+    </linearGradient>
+    <linearGradient id="bolt-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#46D9FF" />
+      <stop offset="50%" stop-color="#51afef" />
+      <stop offset="100%" stop-color="#2257a0" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Background Container -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-grad)" />
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="#3f444a" stroke-width="8" opacity="0.8" />
+  
+  <!-- Subtle Terminal Indicator bar -->
+  <circle cx="96" cy="88" r="10" fill="#ff6c6b" />
+  <circle cx="128" cy="88" r="10" fill="#ECBE7B" />
+  <circle cx="160" cy="88" r="10" fill="#98be65" />
+  
+  <!-- Lightning Bolt Icon with Glow -->
+  <g filter="url(#glow)">
+    <path d="M280 120 L160 300 L250 300 L230 420 L360 240 L270 240 Z" 
+          fill="url(#bolt-grad)" 
+          stroke="#46D9FF" 
+          stroke-width="8" 
+          stroke-linejoin="round" />
+  </g>
+</svg>
