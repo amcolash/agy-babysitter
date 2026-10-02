@@ -1,45 +1,46 @@
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 
-const terminalContainer = document.getElementById('terminal-container');
-const terminalEl = document.getElementById('terminal');
+const terminalContainer = document.getElementById("terminal-container");
+const terminalEl = document.getElementById("terminal");
 
-const savedFontSize = parseInt(localStorage.getItem('agy_terminal_font_size'), 10);
-const initialFontSize = (savedFontSize >= 8 && savedFontSize <= 36) ? savedFontSize : 14;
+const savedFontSize = parseInt(localStorage.getItem("agy_terminal_font_size"), 10);
+const initialFontSize = savedFontSize >= 8 && savedFontSize <= 36 ? savedFontSize : 14;
 
 export const term = new Terminal({
   cursorBlink: true,
-  cursorStyle: 'block',
+  cursorStyle: "block",
   fontSize: initialFontSize,
-  fontFamily: '"SauceCodePro Nerd Font Mono", "SauceCodePro Nerd Font", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  fontFamily:
+    '"SauceCodePro Nerd Font Mono", "SauceCodePro Nerd Font", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
   theme: {
-    foreground: '#bbc2cf',
-    background: '#1b2229',
-    cursor: '#51afef',
-    cursorAccent: '#282c34',
-    selectionForeground: '#DFDFDF',
-    selectionBackground: '#3f444a',
+    foreground: "#bbc2cf",
+    background: "#1b2229",
+    cursor: "#51afef",
+    cursorAccent: "#282c34",
+    selectionForeground: "#DFDFDF",
+    selectionBackground: "#3f444a",
     // 16 ANSI Colors matching Doom One
-    black: '#1b2229',
-    brightBlack: '#3f444a',
-    red: '#ff6c6b',
-    brightRed: '#ff6655',
-    green: '#98be65',
-    brightGreen: '#99bb66',
-    yellow: '#ECBE7B',
-    brightYellow: '#ECBE7B',
-    blue: '#51afef',
-    brightBlue: '#51afef',
-    magenta: '#c678dd',
-    brightMagenta: '#c678dd',
-    cyan: '#46D9FF',
-    brightCyan: '#46D9FF',
-    white: '#DFDFDF',
-    brightWhite: '#bbc2cf'
+    black: "#1b2229",
+    brightBlack: "#3f444a",
+    red: "#ff6c6b",
+    brightRed: "#ff6655",
+    green: "#98be65",
+    brightGreen: "#99bb66",
+    yellow: "#ECBE7B",
+    brightYellow: "#ECBE7B",
+    blue: "#51afef",
+    brightBlue: "#51afef",
+    magenta: "#c678dd",
+    brightMagenta: "#c678dd",
+    cyan: "#46D9FF",
+    brightCyan: "#46D9FF",
+    white: "#DFDFDF",
+    brightWhite: "#bbc2cf",
   },
   allowProposedApi: true,
-  scrollback: 50000
+  scrollback: 50000,
 });
 
 export const fitAddon = new FitAddon();
@@ -50,14 +51,33 @@ term.loadAddon(webLinksAddon);
 
 let onResizeCallback = null;
 
+export function configureHelperTextarea() {
+  const helperTextarea = terminalEl.querySelector(".xterm-helper-textarea");
+  if (helperTextarea) {
+    helperTextarea.setAttribute("autocorrect", "off");
+    helperTextarea.setAttribute("autocapitalize", "none");
+    helperTextarea.setAttribute("autocomplete", "off");
+    helperTextarea.setAttribute("spellcheck", "false");
+    helperTextarea.setAttribute("inputmode", "email");
+    helperTextarea.setAttribute("enterkeyhint", "enter");
+    helperTextarea.setAttribute("data-gramm", "false");
+    helperTextarea.setAttribute("data-enable-grammarly", "false");
+  }
+}
+
 export function initTerminal(onInput, onResize) {
   onResizeCallback = onResize;
   term.open(terminalEl);
   fitAddon.fit();
+  configureHelperTextarea();
 
   term.onData((data) => {
     if (onInput) onInput(data);
   });
+
+  // Re-apply whenever terminal container receives focus/click/touch
+  terminalContainer.addEventListener("focusin", configureHelperTextarea);
+  terminalContainer.addEventListener("touchstart", configureHelperTextarea, { passive: true });
 
   // Mobile Touch Swipe Scrolling & Pinch-to-Zoom Support
   let lastTouchY = 0;
@@ -75,71 +95,83 @@ export function initTerminal(onInput, onResize) {
     return Math.hypot(dx, dy);
   }
 
-  terminalContainer.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1) {
-      lastTouchY = e.touches[0].clientY;
-      lastTouchX = e.touches[0].clientX;
-      accumulatedTouchDelta = 0;
-      initialPinchDistance = null;
-    } else if (e.touches.length === 2) {
-      initialPinchDistance = getPinchDistance(e.touches);
-      initialPinchFontSize = term.options.fontSize || 14;
-    }
-  }, { passive: false });
+  terminalContainer.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length === 1) {
+        lastTouchY = e.touches[0].clientY;
+        lastTouchX = e.touches[0].clientX;
+        accumulatedTouchDelta = 0;
+        initialPinchDistance = null;
+      } else if (e.touches.length === 2) {
+        initialPinchDistance = getPinchDistance(e.touches);
+        initialPinchFontSize = term.options.fontSize || 14;
+      }
+    },
+    { passive: false },
+  );
 
-  terminalContainer.addEventListener('touchmove', (e) => {
-    // Two-finger Pinch to Zoom / Font Resize on mobile
-    if (e.touches.length === 2 && initialPinchDistance) {
-      e.preventDefault();
-      const currentDistance = getPinchDistance(e.touches);
-      if (currentDistance && initialPinchDistance > 0) {
-        const ratio = currentDistance / initialPinchDistance;
-        const newFontSize = Math.min(32, Math.max(8, Math.round(initialPinchFontSize * ratio)));
-        if (newFontSize !== term.options.fontSize) {
-          term.options.fontSize = newFontSize;
-          localStorage.setItem('agy_terminal_font_size', String(newFontSize));
-          handleTerminalResize();
+  terminalContainer.addEventListener(
+    "touchmove",
+    (e) => {
+      // Two-finger Pinch to Zoom / Font Resize on mobile
+      if (e.touches.length === 2 && initialPinchDistance) {
+        e.preventDefault();
+        const currentDistance = getPinchDistance(e.touches);
+        if (currentDistance && initialPinchDistance > 0) {
+          const ratio = currentDistance / initialPinchDistance;
+          const newFontSize = Math.min(32, Math.max(8, Math.round(initialPinchFontSize * ratio)));
+          if (newFontSize !== term.options.fontSize) {
+            term.options.fontSize = newFontSize;
+            localStorage.setItem("agy_terminal_font_size", String(newFontSize));
+            handleTerminalResize();
+          }
+        }
+        return;
+      }
+
+      // Single finger swipe scrolling
+      if (e.touches.length === 1) {
+        e.preventDefault();
+        const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
+        const diffY = currentY - lastTouchY;
+        lastTouchY = currentY;
+        lastTouchX = currentX;
+        accumulatedTouchDelta += diffY;
+
+        while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
+          const col = Math.max(1, Math.min(term.cols || 80, Math.floor(currentX / 9) || 1));
+          const row = Math.max(1, Math.min(term.rows || 24, Math.floor(currentY / 18) || 1));
+
+          if (accumulatedTouchDelta > 0) {
+            // Swiping down -> scroll up in terminal buffer / zellij history (SGR Wheel Up)
+            accumulatedTouchDelta -= SWIPE_STEP_PX;
+            if (onInput) onInput(`\x1b[<64;${col};${row}M`);
+            term.scrollLines(-2);
+          } else {
+            // Swiping up -> scroll down towards bottom (SGR Wheel Down)
+            accumulatedTouchDelta += SWIPE_STEP_PX;
+            if (onInput) onInput(`\x1b[<65;${col};${row}M`);
+            term.scrollLines(2);
+          }
         }
       }
-      return;
-    }
+    },
+    { passive: false },
+  );
 
-    // Single finger swipe scrolling
-    if (e.touches.length === 1) {
-      e.preventDefault();
-      const currentY = e.touches[0].clientY;
-      const currentX = e.touches[0].clientX;
-      const diffY = currentY - lastTouchY;
-      lastTouchY = currentY;
-      lastTouchX = currentX;
-      accumulatedTouchDelta += diffY;
-
-      while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
-        const col = Math.max(1, Math.min(term.cols || 80, Math.floor(currentX / 9) || 1));
-        const row = Math.max(1, Math.min(term.rows || 24, Math.floor(currentY / 18) || 1));
-
-        if (accumulatedTouchDelta > 0) {
-          // Swiping down -> scroll up in terminal buffer / zellij history (SGR Wheel Up)
-          accumulatedTouchDelta -= SWIPE_STEP_PX;
-          if (onInput) onInput(`\x1b[<64;${col};${row}M`);
-          term.scrollLines(-2);
-        } else {
-          // Swiping up -> scroll down towards bottom (SGR Wheel Down)
-          accumulatedTouchDelta += SWIPE_STEP_PX;
-          if (onInput) onInput(`\x1b[<65;${col};${row}M`);
-          term.scrollLines(2);
-        }
+  terminalContainer.addEventListener(
+    "touchend",
+    (e) => {
+      if (e.touches.length < 2) {
+        initialPinchDistance = null;
       }
-    }
-  }, { passive: false });
+    },
+    { passive: true },
+  );
 
-  terminalContainer.addEventListener('touchend', (e) => {
-    if (e.touches.length < 2) {
-      initialPinchDistance = null;
-    }
-  }, { passive: true });
-
-  const appContainer = document.getElementById('app-container');
+  const appContainer = document.getElementById("app-container");
 
   function updateAppViewportHeight() {
     if (window.visualViewport && appContainer) {
@@ -153,8 +185,8 @@ export function initTerminal(onInput, onResize) {
 
   // Handle mobile virtual keyboard resize smoothly
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateAppViewportHeight);
-    window.visualViewport.addEventListener('scroll', () => {
+    window.visualViewport.addEventListener("resize", updateAppViewportHeight);
+    window.visualViewport.addEventListener("scroll", () => {
       window.scrollTo(0, 0);
     });
   }
@@ -163,10 +195,10 @@ export function initTerminal(onInput, onResize) {
     requestAnimationFrame(handleTerminalResize);
   });
   resizeObserver.observe(terminalContainer);
-  window.addEventListener('resize', updateAppViewportHeight);
+  window.addEventListener("resize", updateAppViewportHeight);
 
   // Re-fit when device orientation changes
-  window.addEventListener('orientationchange', () => {
+  window.addEventListener("orientationchange", () => {
     setTimeout(updateAppViewportHeight, 100);
     setTimeout(updateAppViewportHeight, 300);
   });
@@ -179,7 +211,7 @@ export function initTerminal(onInput, onResize) {
   }
 
   // Ensure terminal receives focus and opens keyboard on click
-  terminalContainer.addEventListener('click', () => {
+  terminalContainer.addEventListener("click", () => {
     term.focus();
   });
 
@@ -192,11 +224,11 @@ export function initTerminal(onInput, onResize) {
   });
 
   // Standard paste support (Ctrl+V / Cmd+V or right-click paste)
-  window.addEventListener('paste', (e) => {
+  window.addEventListener("paste", (e) => {
     const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
 
-    const pastedText = e.clipboardData?.getData('text');
+    const pastedText = e.clipboardData?.getData("text");
     if (pastedText && onInput) {
       e.preventDefault();
       onInput(pastedText);
