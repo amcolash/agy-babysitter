@@ -10,7 +10,7 @@
     "check": "node --check src/*.js src/routes/*.js src/client/*.js && vite build",
     "server": "node --watch src/server.js",
     "start": "node src/server.js",
-    "stop": "pkill -f 'node.*src/server.js' 2>/dev/null || true",
+    "stop": "pkill -f 'node.*src/server.js' 2>/dev/null || true; pkill -f 'systemd-inhibit.*agy-babysitter' 2>/dev/null || true; pkill -f 'caffeinate -d -i -m -u' 2>/dev/null || true",
     "restart": "node src/restart.js",
     "session": "node src/cli.js"
   },

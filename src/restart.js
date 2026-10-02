@@ -1,6 +1,7 @@
 import { execSync, spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { stopAllWakelocks } from './wakelock.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,9 @@ console.log('Stopping existing server...');
 try {
   execSync("pkill -f 'node.*src/server.js'", { stdio: 'ignore' });
 } catch (e) {}
+
+console.log('Stopping active wakelocks...');
+stopAllWakelocks();
 
 setTimeout(() => {
   console.log('Starting agy-babysitter server in background...');

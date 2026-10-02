@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import os from 'os';
 import config from './config.js';
 
@@ -21,7 +21,7 @@ function spawnWakelockProcess() {
     args = ['--what=idle:sleep', '--who=agy-babysitter', '--why=Active terminal session', 'sleep', 'infinity'];
   } else if (platform === 'darwin') {
     cmd = 'caffeinate';
-    args = ['-d', '-i', '-m', '-u'];
+    args = ['-d', '-i', '-m', '-u', '-w', String(process.pid)];
   }
 
   if (!cmd) {
@@ -73,6 +73,19 @@ export function releaseWakelock() {
     } catch (e) {}
     wakelockProcess = null;
   }
+}
+
+/**
+ * Stops and kills all active wakelock processes system-wide
+ */
+export function stopAllWakelocks() {
+  releaseWakelock();
+  try {
+    execSync("pkill -f 'systemd-inhibit.*agy-babysitter'", { stdio: 'ignore' });
+  } catch (e) {}
+  try {
+    execSync("pkill -f 'caffeinate -d -i -m -u'", { stdio: 'ignore' });
+  } catch (e) {}
 }
 
 /**
