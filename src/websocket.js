@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { attachToSession } from './ptyManager.js';
 import { touchWakelock } from './wakelock.js';
-import { markTurnStarted, clearNotification, getAllNotificationStates, feedSessionStream } from './sessionMonitor.js';
+import { markTurnStarted, clearNotification, getAllNotificationStates, feedSessionStream, onSessionDisconnected } from './sessionMonitor.js';
 
 /**
  * Sets up WebSocket server for terminal streaming and control actions
@@ -124,6 +124,7 @@ export function setupWebSocketServer(server) {
     const cleanup = () => {
       if (isClosed) return;
       isClosed = true;
+      onSessionDisconnected(sessionName);
       if (ptyProcess) {
         try {
           ptyProcess.kill();
