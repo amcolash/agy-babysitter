@@ -5,14 +5,21 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build:client": "vite build",
+    "build:server": "node scripts/build-server.js",
+    "build": "npm run build:client && npm run build:server",
     "preview": "vite preview",
-    "check": "node --check src/*.js src/routes/*.js src/client/*.js && vite build",
-    "server": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "stop": "pkill -f 'node.*src/server.js' 2>/dev/null || true; pkill -f 'systemd-inhibit.*agy-babysitter' 2>/dev/null || true; pkill -f 'caffeinate -d -i -m -u' 2>/dev/null || true",
+    "check": "node --check src/*.js src/routes/*.js src/client/*.js && npm run build",
+    "dev": "node --watch src/server.js",
+    "start": "node dist/server/server.js",
+    "stop": "systemctl --user stop agy-babysitter.service 2>/dev/null || pkill -f 'node.*server.js' 2>/dev/null || true",
     "restart": "node src/restart.js",
-    "session": "node src/cli.js"
+    "deploy": "npm run build && npm run restart",
+    "status": "systemctl --user status agy-babysitter.service",
+    "logs": "journalctl --user -u agy-babysitter -f",
+    "session": "node src/cli.js",
+    "service:install": "./systemd/install.sh",
+    "service:uninstall": "./systemd/uninstall.sh"
   },
   "keywords": [
     "antigravity",

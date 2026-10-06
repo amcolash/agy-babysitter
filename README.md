@@ -41,10 +41,44 @@ DEFAULT_CWD=~/Github/my-project
 
 ## Available NPM Scripts
 
-- `npm run dev` - Launches both the Express backend and Vite dev server with instant HMR.
-- `npm run build` - Builds the frontend assets via Vite and Tailwind CSS v4 into `dist/`.
-- `npm start` - Launches the production server serving the built `dist/` bundle.
-- `npm run session` - Attaches to (or starts) a dedicated local `agy-main` zellij session from your terminal.
+- `npm run dev` - Launches backend and dev server with instant watch mode.
+- `npm run build` - Builds the production client assets into `dist/`.
+- `npm start` - Runs the server locally.
+- `npm run restart` - Restarts the background systemd service cleanly (or standalone if not using systemd).
+- `npm run deploy` - One-step build and restart (`npm run build && npm run restart`).
+- `npm run status` - Checks systemd service status.
+- `npm run logs` - Streams live journal logs from systemd.
+- `npm run session` - Attaches to (or creates) the default local zellij session.
+- `npm run service:install` - Installs, enables, and starts the systemd user service.
+- `npm run service:uninstall` - Disables and removes the systemd user service.
+
+---
+
+## Startup & Service Management
+
+The server runs as a standard, minimal systemd user service (`agy-babysitter.service`):
+
+1. **Install and Enable on Startup**:
+   ```bash
+   npm run service:install
+   ```
+   - Automatically starts on system boot (via `default.target` and `loginctl enable-linger`).
+   - Restarts automatically if it crashes (`Restart=on-failure`).
+
+2. **Deploying Changes**:
+   Whenever you pull or update code, run:
+   ```bash
+   npm run deploy
+   ```
+   This compiles both frontend (`dist/client/`) and server backend (`dist/server/`) into `dist/`, locking the production build in place, and restarts the systemd service. Connected browser tabs automatically refresh without dropping active terminal sessions.
+
+3. **Isolated Development**:
+   Editing code in `src/` does not affect the running production daemon until you explicitly run `npm run deploy`. For active development with hot-reloading, run `npm run dev`.
+
+4. **Service Controls**:
+   - `npm run status` - View service health and memory usage.
+   - `npm run logs` - Live log streaming.
+   - `npm run restart` - Quick restart.
 
 ---
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=agy Babysitter Web Terminal Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Github/agy-babysitter
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node dist/server/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -5,13 +5,13 @@ import { fileURLToPath } from 'url';
 import config, { resolveTilde } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const serverScript = path.join(__dirname, 'server.js');
-const rootDir = path.resolve(__dirname, '..');
+const distServerScript = path.join(rootDir, 'dist', 'server', 'server.js');
+const srcServerScript = path.join(__dirname, 'server.js');
+const serverScript = fs.existsSync(distServerScript) ? distServerScript : srcServerScript;
 
 function isServerRunning() {
   try {
-    const stdout = execSync('pgrep -f "node.*src/server.js"', {
+    const stdout = execSync('pgrep -f "node.*server.js"', {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore']
     });
