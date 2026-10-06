@@ -237,15 +237,23 @@ export function initTerminal(onInput, onResize) {
         lastTouchX = currentX;
         accumulatedTouchDelta += diffY;
 
+        const rect = terminalEl.getBoundingClientRect();
+        const cellWidth = (rect.width / (term.cols || 80)) || 9;
+        const cellHeight = (rect.height / (term.rows || 24)) || 18;
+        const col = Math.max(1, Math.min(term.cols || 80, Math.floor((currentX - rect.left) / cellWidth) + 1));
+        const row = Math.max(1, Math.min(term.rows || 24, Math.floor((currentY - rect.top) / cellHeight) + 1));
+
         while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
           if (accumulatedTouchDelta > 0) {
-            // Swiping down -> scroll up in terminal buffer
+            // Swiping down -> scroll up in Zellij buffer (SGR Wheel Up)
             accumulatedTouchDelta -= SWIPE_STEP_PX;
-            term.scrollLines(-2);
+            if (onInput) onInput(`\x1b[<64;${col};${row}M`);
+            term.scrollLines(-1);
           } else {
-            // Swiping up -> scroll down towards bottom
+            // Swiping up -> scroll down towards bottom (SGR Wheel Down)
             accumulatedTouchDelta += SWIPE_STEP_PX;
-            term.scrollLines(2);
+            if (onInput) onInput(`\x1b[<65;${col};${row}M`);
+            term.scrollLines(1);
           }
         }
       }

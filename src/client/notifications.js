@@ -30,11 +30,33 @@ export function unlockAudio() {
   }
 }
 
+let lastSoundPlayedAt = 0;
+const SOUND_THROTTLE_MS = 5000;
+
 /**
- * Play a synthesized warm, gentle acoustic chime
+ * Play a synthesized warm, gentle acoustic chime (throttled to at most once every 5 seconds)
  */
 export function playNotificationSound() {
   try {
+    const now = Date.now();
+
+    // Check in-memory throttle
+    if (now - lastSoundPlayedAt < SOUND_THROTTLE_MS) {
+      return;
+    }
+
+    // Check cross-browser-tab throttle via localStorage
+    try {
+      const stored = parseInt(localStorage.getItem('agy_last_ding_time') || '0', 10);
+      if (now - stored < SOUND_THROTTLE_MS) {
+        lastSoundPlayedAt = stored;
+        return;
+      }
+      localStorage.setItem('agy_last_ding_time', String(now));
+    } catch (e) {}
+
+    lastSoundPlayedAt = now;
+
     const ctx = getAudioContext();
     if (!ctx) return;
 
@@ -42,13 +64,13 @@ export function playNotificationSound() {
       ctx.resume().catch(() => {});
     }
 
-    const now = ctx.currentTime;
+    const audioTime = ctx.currentTime;
 
     // Steep warm lowpass filter to produce a soft, organic wooden/tine timbre
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(850, now);
-    filter.Q.setValueAtTime(0.5, now);
+    filter.frequency.setValueAtTime(850, audioTime);
+    filter.Q.setValueAtTime(0.5, audioTime);
     filter.connect(ctx.destination);
 
     // Warm Rhodes / marimba voicing: F4 (349.23 Hz) -> C5 (523.25 Hz)
@@ -58,7 +80,7 @@ export function playNotificationSound() {
     ];
 
     notes.forEach((note) => {
-      const startTime = now + note.delay;
+      const startTime = audioTime + note.delay;
 
       // Fundamental tone
       const osc = ctx.createOscillator();
