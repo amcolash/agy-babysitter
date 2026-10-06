@@ -14,10 +14,9 @@ echo "Building frontend assets..."
 mkdir -p "${SYSTEMD_USER_DIR}"
 ln -sf "${REPO_DIR}/systemd/agy-babysitter.service" "${SYSTEMD_USER_DIR}/agy-babysitter.service"
 
-# Enable user lingering so the server starts on boot before desktop login
-if command -v loginctl >/dev/null 2>&1; then
-  loginctl enable-linger "${USER}" 2>/dev/null || true
-fi
+# Install CLI helper symlink
+echo "Installing CLI helper (agyh)..."
+(cd "${REPO_DIR}" && npm run cli:install)
 
 # Reload and enable service
 systemctl --user daemon-reload
