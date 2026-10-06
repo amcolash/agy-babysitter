@@ -29,7 +29,7 @@ export async function attachToSession({
     await createSession({ name: sessionName, cwd: targetCwd, command: targetCommand });
   }
 
-  const ptyProcess = pty.spawn('zellij', ['attach', '-c', sessionName, '--', 'bash', '-c', wrappedCommand], {
+  const ptyProcess = pty.spawn('zellij', ['attach', sessionName], {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,

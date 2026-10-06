@@ -66,7 +66,9 @@ export function configureHelperTextarea() {
     if (isMobileDevice()) {
       helperTextarea.setAttribute('inputmode', 'none');
       helperTextarea.setAttribute('tabindex', '-1');
+      helperTextarea.setAttribute('readonly', 'true');
     } else {
+      helperTextarea.removeAttribute('readonly');
       helperTextarea.setAttribute('autocorrect', 'off');
       helperTextarea.setAttribute('autocapitalize', 'none');
       helperTextarea.setAttribute('autocomplete', 'off');
@@ -151,7 +153,7 @@ export function initTerminal(onInput, onResize) {
         return;
       }
 
-      // Single finger swipe scrolling
+      // Single finger swipe scrolling (scroll viewport only, never send raw escape sequences into stdin)
       if (e.touches.length === 1) {
         if (Math.hypot(e.touches[0].clientX - startTouchX, e.touches[0].clientY - startTouchY) > 8) {
           hasMovedTouch = true;
@@ -166,18 +168,13 @@ export function initTerminal(onInput, onResize) {
         accumulatedTouchDelta += diffY;
 
         while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
-          const col = Math.max(1, Math.min(term.cols || 80, Math.floor(currentX / 9) || 1));
-          const row = Math.max(1, Math.min(term.rows || 24, Math.floor(currentY / 18) || 1));
-
           if (accumulatedTouchDelta > 0) {
-            // Swiping down -> scroll up in terminal buffer / zellij history (SGR Wheel Up)
+            // Swiping down -> scroll up in terminal buffer
             accumulatedTouchDelta -= SWIPE_STEP_PX;
-            if (onInput) onInput(`\x1b[<64;${col};${row}M`);
             term.scrollLines(-2);
           } else {
-            // Swiping up -> scroll down towards bottom (SGR Wheel Down)
+            // Swiping up -> scroll down towards bottom
             accumulatedTouchDelta += SWIPE_STEP_PX;
-            if (onInput) onInput(`\x1b[<65;${col};${row}M`);
             term.scrollLines(2);
           }
         }

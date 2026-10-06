@@ -179,9 +179,18 @@ function renderDrawerSessions() {
 
           if (data.success) {
             showToast(`Terminated session '${session.name}'`, 'info');
-            if (getCurrentSession() === session.name) {
+            const wasCurrent = getCurrentSession() === session.name;
+            if (wasCurrent) {
               writeTerminal(`\r\n\x1b[33m[Session '${session.name}' terminated]\x1b[0m\r\n`);
               disconnectTerminal();
+              try {
+                localStorage.removeItem('agy_selected_session');
+                const url = new URL(window.location);
+                if (url.searchParams.get('session') === session.name) {
+                  url.searchParams.delete('session');
+                  window.history.replaceState(null, '', url);
+                }
+              } catch (e) {}
             }
             await loadSessions();
           } else {
@@ -212,29 +221,46 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
     if (!hasSessions) {
       clearSessionFromStorageAndUrl();
       disconnectTerminal();
+      updateStatus('disconnected', 'No active sessions');
       renderDrawerSessions();
       return;
     }
 
-    // Determine target session: explicit > URL param > localStorage > first available
+    // Determine target session: explicit > URL param > current > localStorage > first available
     const urlParams = new URLSearchParams(window.location.search);
     const savedSession = localStorage.getItem('agy_selected_session');
-    let target = selectSessionName || urlParams.get('session') || savedSession || getCurrentSession();
+    const current = getCurrentSession();
+    let target = selectSessionName;
 
-    if (target && activeSessionsList.some((s) => s.name === target)) {
-      // Valid target
-    } else if (hasSessions) {
+    if (!target) {
+      const urlSession = urlParams.get('session');
+      if (urlSession && activeSessionsList.some((s) => s.name === urlSession)) {
+        target = urlSession;
+      } else if (current && activeSessionsList.some((s) => s.name === current)) {
+        target = current;
+      } else if (savedSession && activeSessionsList.some((s) => s.name === savedSession)) {
+        target = savedSession;
+      } else {
+        target = activeSessionsList[0].name;
+      }
+    }
+
+    // Fallback if target is not in current active sessions
+    if (!activeSessionsList.some((s) => s.name === target)) {
       target = activeSessionsList[0].name;
     }
 
-    renderDrawerSessions();
+    syncSessionToStorageAndUrl(target);
 
-    if (hasSessions && target) {
-      syncSessionToStorageAndUrl(target);
-      if (autoConnect && (!getCurrentSession() || getCurrentSession() !== target)) {
+    if (autoConnect) {
+      if (!getCurrentSession() || getCurrentSession() !== target) {
         connectTerminal(target);
+      } else {
+        updateStatus('connected', `Connected (${target})`);
       }
     }
+
+    renderDrawerSessions();
   } catch (err) {
     // safeFetchJson handled disconnected overlay and recovery polling
   }

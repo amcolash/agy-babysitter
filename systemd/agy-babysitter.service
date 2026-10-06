@@ -7,6 +7,7 @@ Type=simple
 WorkingDirectory=%h/Github/agy-babysitter
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/env node dist/server/server.js
+KillMode=process
 Restart=on-failure
 RestartSec=5
 

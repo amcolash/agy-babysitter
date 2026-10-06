@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { execFile, execSync } from 'child_process';
 import util from 'util';
 import path from 'path';
 import fs from 'fs';
@@ -189,9 +189,22 @@ export async function createSession({ name, command, cwd }) {
     sessionName = await getUniqueSessionName(sessionName);
   }
 
-  // Spawn zellij session detached in the background (-b) with full color support
-  const args = ['attach', '-b', sessionName, '--', 'bash', '-c', wrappedCommand];
-  await execFileAsync('zellij', args, {
+  // Spawn zellij session detached in the background (-b) with full color support.
+  // When running under systemd, use systemd-run --scope to place the zellij session/daemon in an independent user scope
+  // so restarting or redeploying agy-babysitter service never interrupts or kills active sessions.
+  let isSystemdUser = false;
+  try {
+    if (process.env.INVOCATION_ID || process.env.JOURNAL_STREAM || execSync('systemctl --user is-active agy-babysitter.service 2>/dev/null', { stdio: 'pipe' }).toString().trim() === 'active') {
+      isSystemdUser = true;
+    }
+  } catch (e) {}
+
+  const executable = isSystemdUser ? 'systemd-run' : 'zellij';
+  const args = isSystemdUser
+    ? ['--user', '--scope', '--quiet', 'zellij', 'attach', '-b', sessionName, '--', 'bash', '-c', wrappedCommand]
+    : ['attach', '-b', sessionName, '--', 'bash', '-c', wrappedCommand];
+
+  await execFileAsync(executable, args, {
     cwd: sessionCwd,
     env: {
       ...process.env,
