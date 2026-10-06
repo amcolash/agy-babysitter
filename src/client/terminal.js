@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
+import { showToast } from "./toast.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
@@ -30,6 +31,8 @@ export function saveTerminalFontSize(size) {
 }
 
 const initialFontSize = getSavedTerminalFontSize();
+
+let lastSelection = '';
 
 export const term = new Terminal({
   cursorBlink: true,
@@ -105,6 +108,53 @@ export function initTerminal(onInput, onResize) {
     if (onInput) onInput(data);
   });
 
+  // Intercept left-click mouse selection to simulate shiftKey=true for xterm.
+  // This allows native xterm text highlighting/selection while preserving Zellij's mouse reporting for wheel scrolling!
+  let isLeftDragging = false;
+
+  terminalContainer.addEventListener(
+    'mousedown',
+    (e) => {
+      if (e.button === 0) {
+        isLeftDragging = true;
+        try {
+          Object.defineProperty(e, 'shiftKey', { get: () => true, configurable: true });
+        } catch (err) {}
+      }
+    },
+    { capture: true }
+  );
+
+  terminalContainer.addEventListener(
+    'mousemove',
+    (e) => {
+      if (isLeftDragging || e.buttons === 1) {
+        try {
+          Object.defineProperty(e, 'shiftKey', { get: () => true, configurable: true });
+        } catch (err) {}
+      } else if (e.buttons === 0) {
+        // When simply hovering without buttons pressed, stop hover propagation to xterm's mouse tracking
+        // so background repaints don't clear the user's active selection!
+        e.stopPropagation();
+      }
+    },
+    { capture: true }
+  );
+
+  terminalContainer.addEventListener(
+    'mouseup',
+    (e) => {
+      if (e.button === 0 || isLeftDragging) {
+        isLeftDragging = false;
+        try {
+          Object.defineProperty(e, 'shiftKey', { get: () => true, configurable: true });
+        } catch (err) {}
+        updateSelectionFromAllSources();
+      }
+    },
+    { capture: true }
+  );
+
   // Re-apply whenever terminal container receives focus/click/touch
   terminalContainer.addEventListener("focusin", configureHelperTextarea);
   terminalContainer.addEventListener("touchstart", configureHelperTextarea, { passive: true });
@@ -167,7 +217,7 @@ export function initTerminal(onInput, onResize) {
         return;
       }
 
-      // Single finger swipe scrolling (scroll viewport only, never send raw escape sequences into stdin)
+      // Single finger swipe scrolling
       if (e.touches.length === 1) {
         if (Math.hypot(e.touches[0].clientX - startTouchX, e.touches[0].clientY - startTouchY) > 8) {
           hasMovedTouch = true;
@@ -274,13 +324,155 @@ export function initTerminal(onInput, onResize) {
     }
   });
 
-  // Automatic copy to clipboard when selecting text
-  term.onSelectionChange(() => {
-    const selectedText = term.getSelection();
-    if (selectedText && selectedText.length > 0 && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(selectedText).catch(() => {});
+  // Multi-source selection tracking
+  function updateSelectionFromAllSources() {
+    const termSel = term.hasSelection() ? term.getSelection() : '';
+    const winSel = window.getSelection() ? window.getSelection().toString() : '';
+    const text = termSel || winSel;
+    if (text && text.length > 0) {
+      lastSelection = text;
+    }
+  }
+
+  term.onSelectionChange(updateSelectionFromAllSources);
+  document.addEventListener('selectionchange', updateSelectionFromAllSources);
+  window.addEventListener('mouseup', updateSelectionFromAllSources);
+
+  // Global window keydown interceptor in capture phase for Ctrl+Shift+C and Ctrl+Shift+V
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      const isC = e.key === 'C' || e.key === 'c' || e.code === 'KeyC' || e.keyCode === 67;
+      const isV = e.key === 'V' || e.key === 'v' || e.code === 'KeyV' || e.keyCode === 86;
+
+      const activeTag = document.activeElement?.tagName;
+      const isInsideOtherInput =
+        (activeTag === 'INPUT' || activeTag === 'TEXTAREA') &&
+        !document.activeElement.classList.contains('xterm-helper-textarea');
+      if (isInsideOtherInput) return;
+
+      if (e.ctrlKey && e.shiftKey && isC) {
+        e.preventDefault();
+        e.stopPropagation();
+        copySelectionToClipboard(true);
+        return;
+      }
+
+      if (e.ctrlKey && e.shiftKey && isV) {
+        e.preventDefault();
+        e.stopPropagation();
+        pasteClipboardToTerminal(onInput);
+        return;
+      }
+    },
+    { capture: true }
+  );
+
+  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection)
+  term.attachCustomKeyEventHandler((e) => {
+    const isC = e.key === 'C' || e.key === 'c' || e.code === 'KeyC' || e.keyCode === 67;
+    const isV = e.key === 'V' || e.key === 'v' || e.code === 'KeyV' || e.keyCode === 86;
+
+    const hasActiveSelection = Boolean(getActiveSelectionText());
+    const isCtrlShiftC = e.ctrlKey && e.shiftKey && isC;
+    const isCmdC = e.metaKey && isC && hasActiveSelection;
+    const isCtrlCWithSel = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && isC && hasActiveSelection;
+
+    if (isCtrlShiftC || isCmdC || isCtrlCWithSel) {
+      if (e.type === 'keydown') {
+        copySelectionToClipboard(true);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    const isCtrlShiftV = e.ctrlKey && e.shiftKey && isV;
+    const isCmdV = e.metaKey && isV;
+
+    if (isCtrlShiftV || isCmdV) {
+      if (e.type === 'keydown') {
+        pasteClipboardToTerminal(onInput);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    return true;
+  });
+
+  // Right-click custom context menu
+  const contextMenu = document.getElementById('terminal-context-menu');
+  const btnMenuCopy = document.getElementById('menu-item-copy');
+  const btnMenuPaste = document.getElementById('menu-item-paste');
+  const btnMenuSelectAll = document.getElementById('menu-item-select-all');
+  const btnMenuClear = document.getElementById('menu-item-clear');
+
+  function closeContextMenu() {
+    if (contextMenu) contextMenu.classList.add('hidden');
+  }
+
+  terminalContainer.addEventListener('contextmenu', (e) => {
+    if (isMobileDevice()) return;
+    e.preventDefault();
+    if (!contextMenu) return;
+
+    updateSelectionFromAllSources();
+
+    // Position menu near cursor within viewport
+    const menuWidth = 190;
+    const menuHeight = 160;
+    const x = Math.min(window.innerWidth - menuWidth - 10, Math.max(10, e.clientX));
+    const y = Math.min(window.innerHeight - menuHeight - 10, Math.max(10, e.clientY));
+
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+    contextMenu.classList.remove('hidden');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (contextMenu && !contextMenu.contains(e.target)) {
+      closeContextMenu();
     }
   });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeContextMenu();
+  });
+
+  if (btnMenuCopy) {
+    btnMenuCopy.addEventListener('click', () => {
+      copySelectionToClipboard(true);
+      closeContextMenu();
+      term.focus();
+    });
+  }
+
+  if (btnMenuPaste) {
+    btnMenuPaste.addEventListener('click', () => {
+      pasteClipboardToTerminal(onInput);
+      closeContextMenu();
+      term.focus();
+    });
+  }
+
+  if (btnMenuSelectAll) {
+    btnMenuSelectAll.addEventListener('click', () => {
+      term.selectAll();
+      lastSelection = term.getSelection();
+      closeContextMenu();
+      term.focus();
+    });
+  }
+
+  if (btnMenuClear) {
+    btnMenuClear.addEventListener('click', () => {
+      term.clear();
+      closeContextMenu();
+      term.focus();
+    });
+  }
 
   // Standard paste support (Ctrl+V / Cmd+V or right-click paste)
   window.addEventListener("paste", (e) => {
@@ -293,6 +485,108 @@ export function initTerminal(onInput, onResize) {
       onInput(pastedText);
     }
   });
+}
+
+export function getActiveSelectionText() {
+  try {
+    const termSel = term.hasSelection() ? term.getSelection() : '';
+    if (termSel && termSel.length > 0) return termSel;
+  } catch (e) {}
+
+  try {
+    const winSel = window.getSelection() ? window.getSelection().toString() : '';
+    if (winSel && winSel.length > 0) return winSel;
+  } catch (e) {}
+
+  if (lastSelection && lastSelection.length > 0) {
+    return lastSelection;
+  }
+
+  return '';
+}
+
+export async function copyTextToClipboard(text, showFeedback = true) {
+  if (!text) {
+    if (showFeedback) showToast('No text selected to copy', 'info', 1200);
+    return false;
+  }
+
+  let success = false;
+
+  // 1. Synchronous execCommand copy (reliable across user gestures and HTTP contexts)
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.width = '1px';
+    ta.style.height = '1px';
+    ta.style.padding = '0';
+    ta.style.border = 'none';
+    ta.style.outline = 'none';
+    ta.style.background = 'transparent';
+    ta.style.opacity = '0.01';
+    ta.style.zIndex = '-9999';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    success = document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch (e) {
+    success = false;
+  }
+
+  // 2. Modern Async Clipboard API
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      success = true;
+    } catch (err) {}
+  }
+
+  if (success) {
+    if (showFeedback) showToast('Copied to clipboard', 'info', 1200);
+    return true;
+  } else {
+    if (showFeedback) showToast('Failed to copy to clipboard', 'error', 1500);
+    return false;
+  }
+}
+
+export async function copySelectionToClipboard(showFeedback = true) {
+  const selection = getActiveSelectionText();
+  if (selection) {
+    return copyTextToClipboard(selection, showFeedback);
+  }
+
+  const promptText = getCurrentTerminalInput();
+  if (promptText) {
+    return copyTextToClipboard(promptText, showFeedback);
+  }
+
+  if (showFeedback) {
+    showToast('No text selected to copy', 'info', 1200);
+  }
+  return false;
+}
+
+export async function pasteClipboardToTerminal(onInputCallback) {
+  try {
+    if (navigator.clipboard?.readText) {
+      const text = await navigator.clipboard.readText();
+      if (text && onInputCallback) {
+        onInputCallback(text);
+        return true;
+      }
+    }
+  } catch (err) {
+    // If clipboard read permission is blocked, open input modal
+    openInputModal();
+  }
+  return false;
 }
 
 export function handleTerminalResize() {

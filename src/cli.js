@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import config, { resolveTilde } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
 const distServerScript = path.join(rootDir, 'dist', 'server', 'server.js');
 const srcServerScript = path.join(__dirname, 'server.js');
 const serverScript = fs.existsSync(distServerScript) ? distServerScript : srcServerScript;
@@ -22,6 +24,17 @@ function isServerRunning() {
 }
 
 function ensureServerRunning() {
+  try {
+    const isSystemdActive = execSync('systemctl --user is-active agy-babysitter.service 2>/dev/null', { encoding: 'utf8' }).trim() === 'active';
+    if (isSystemdActive) {
+      return;
+    }
+    try {
+      execSync('systemctl --user start agy-babysitter.service 2>/dev/null', { stdio: 'ignore' });
+      return;
+    } catch (e) {}
+  } catch (e) {}
+
   if (!isServerRunning()) {
     console.log('Starting agy-babysitter server in background...');
     const proc = spawn(process.execPath, [serverScript], {
