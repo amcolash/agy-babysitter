@@ -95,8 +95,26 @@ function attachSession(sessionName, cwd) {
 
   process.stdout.write('\x1b[?25h'); // ensure cursor visible
 
-  const zellijArgs = ['attach', '-c', sessionName, '--', 'bash', '-c', wrappedCommand];
-  const zellij = spawn('zellij', zellijArgs, {
+  let sessionExists = false;
+  try {
+    const listOut = execSync('zellij list-sessions -n 2>/dev/null', { encoding: 'utf8' });
+    sessionExists = listOut.split('\n').some((line) => line.split('[')[0]?.trim() === sessionName);
+  } catch (e) {}
+
+  if (!sessionExists) {
+    try {
+      execSync(`zellij attach -b ${sessionName}`, { cwd: targetCwd, stdio: 'ignore' });
+      if (targetCommand) {
+        setTimeout(() => {
+          try {
+            execSync(`zellij -s ${sessionName} action write-chars "${targetCommand}\n" 2>/dev/null || true`);
+          } catch (e) {}
+        }, 300);
+      }
+    } catch (e) {}
+  }
+
+  const zellij = spawn('zellij', ['attach', sessionName], {
     cwd: targetCwd,
     stdio: 'inherit'
   });

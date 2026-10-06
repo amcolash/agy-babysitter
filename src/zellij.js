@@ -201,8 +201,8 @@ export async function createSession({ name, command, cwd }) {
 
   const executable = isSystemdUser ? 'systemd-run' : 'zellij';
   const args = isSystemdUser
-    ? ['--user', '--scope', '--quiet', 'zellij', 'attach', '-b', sessionName, '--', 'bash', '-c', wrappedCommand]
-    : ['attach', '-b', sessionName, '--', 'bash', '-c', wrappedCommand];
+    ? ['--user', '--scope', '--quiet', 'zellij', 'attach', '-b', sessionName]
+    : ['attach', '-b', sessionName];
 
   await execFileAsync(executable, args, {
     cwd: sessionCwd,
@@ -215,6 +215,15 @@ export async function createSession({ name, command, cwd }) {
       LANG: process.env.LANG || 'en_US.UTF-8'
     }
   });
+
+  // If an initial command is specified, write it into the native interactive shell pane once ready
+  if (sessionCommand) {
+    setTimeout(async () => {
+      try {
+        await execFileAsync('zellij', ['-s', sessionName, 'action', 'write-chars', `${sessionCommand}\n`]);
+      } catch (e) {}
+    }, 350);
+  }
 
   sessionMeta.set(sessionName, { cwd: sessionCwd, command: sessionCommand });
   saveMetaCache();
