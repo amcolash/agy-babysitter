@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
+import { onTerminalResized, markTurnStarted } from "./notifications.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
@@ -107,6 +108,9 @@ export function initTerminal(onInput, onResize) {
   configureHelperTextarea();
 
   term.onData((data) => {
+    if (data.includes('\r') || data.includes('\n')) {
+      markTurnStarted();
+    }
     if (onInput) onInput(data);
   });
 
@@ -592,6 +596,7 @@ export async function pasteClipboardToTerminal(onInputCallback) {
 }
 
 export function handleTerminalResize() {
+  onTerminalResized();
   try {
     // Invalidate cached char measurements on xterm's internal charSizeService if present
     if (term._core?._charSizeService?.measure) {
@@ -819,5 +824,61 @@ export function getCurrentTerminalInput() {
   } catch (e) {
     console.warn('Failed to extract terminal input:', e);
     return '';
+  }
+}
+
+/**
+ * Extract lines strictly above the active prompt box or cursor line
+ * @param {number} numLines
+ * @returns {string[]}
+ */
+export function getLinesAbovePrompt(numLines = 15) {
+  try {
+    const buffer = term.buffer.active;
+    const currentAbsoluteY = buffer.baseY + buffer.cursorY;
+    const totalLines = buffer.length;
+
+    const isDividerLine = (line) => {
+      if (!line) return false;
+      const str = line.translateToString(true).trim();
+      return /^[─━\-_=]{5,}/.test(str);
+    };
+
+    let topDividerY = -1;
+    let bottomDividerY = -1;
+    const searchStartY = Math.min(totalLines - 1, currentAbsoluteY + 6);
+    const searchEndY = Math.max(0, currentAbsoluteY - 14);
+
+    for (let y = searchStartY; y >= searchEndY; y--) {
+      const line = buffer.getLine(y);
+      if (isDividerLine(line)) {
+        if (bottomDividerY === -1) {
+          bottomDividerY = y;
+        } else {
+          topDividerY = y;
+          break;
+        }
+      }
+    }
+
+    let cutoffY = currentAbsoluteY;
+    if (topDividerY !== -1) {
+      cutoffY = topDividerY;
+    }
+
+    const lines = [];
+    const startY = Math.max(0, cutoffY - numLines);
+    for (let y = startY; y < cutoffY; y++) {
+      const line = buffer.getLine(y);
+      if (line) {
+        const text = line.translateToString(true).trim();
+        if (text && !isDividerLine(line)) {
+          lines.push(text);
+        }
+      }
+    }
+    return lines;
+  } catch (e) {
+    return [];
   }
 }

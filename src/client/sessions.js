@@ -3,6 +3,7 @@ import { connectTerminal, disconnectTerminal, getCurrentSession, setCurrentSessi
 import { showToast } from './toast.js';
 import { openModal } from './modal.js';
 import { safeFetchJson } from './api.js';
+import { getSessionNotification, clearSessionNotification, setNotificationChangeCallback } from './notifications.js';
 
 const btnOpenDrawer = document.getElementById('btn-open-drawer');
 const btnCloseDrawer = document.getElementById('btn-close-drawer');
@@ -20,6 +21,20 @@ const btnDesktopNewSession = document.getElementById('btn-desktop-new-session');
 
 let activeSessionsList = [];
 let isDrawerOpen = false;
+
+function renderStatusIcon(isActive, notif) {
+  if (notif === 'input') {
+    return `<span class="w-3.5 h-3.5 flex-shrink-0 text-[#ECBE7B] flex items-center justify-center" title="Waiting for input"><svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg></span>`;
+  }
+  if (notif === 'settled') {
+    return `<span class="w-3.5 h-3.5 flex-shrink-0 text-[#98be65] flex items-center justify-center" title="Finished"><svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg></span>`;
+  }
+  return `<span class="w-2 h-2 rounded-full flex-shrink-0 ${
+    isActive
+      ? 'bg-[#98be65] shadow-[0_0_6px_rgba(152,190,101,0.8)]'
+      : 'bg-[#5B6268]/50'
+  }"></span>`;
+}
 
 export function getActiveSessions() {
   return activeSessionsList;
@@ -149,6 +164,7 @@ function renderDesktopTabs() {
 
   activeSessionsList.forEach((session) => {
     const isActive = session.name === current;
+    const notif = getSessionNotification(session.name);
     const tab = document.createElement('div');
     tab.className = `session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] ${
       isActive
@@ -159,11 +175,7 @@ function renderDesktopTabs() {
     tab.title = `${session.name} (${session.cwd || session.path || 'default'})`;
 
     tab.innerHTML = `
-      <span class="w-2 h-2 rounded-full flex-shrink-0 ${
-        isActive
-          ? 'bg-[#98be65] shadow-[0_0_6px_rgba(152,190,101,0.8)]'
-          : 'bg-[#5B6268]/50'
-      }"></span>
+      ${renderStatusIcon(isActive, notif)}
       <span class="tracking-tight truncate ${isActive ? 'text-[#51afef]' : ''}">${session.name}</span>
       <button
         type="button"
@@ -222,6 +234,7 @@ function renderDrawerSessions() {
 
   activeSessionsList.forEach((session) => {
     const isActive = session.name === current;
+    const notif = getSessionNotification(session.name);
     const item = document.createElement('div');
     item.className = `group flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer select-none ${
       isActive
@@ -231,11 +244,7 @@ function renderDrawerSessions() {
 
     item.innerHTML = `
       <div class="flex items-center gap-2.5 flex-1 min-w-0">
-        <span class="w-2 h-2 rounded-full flex-shrink-0 ${
-          isActive
-            ? 'bg-[#98be65] shadow-[0_0_8px_rgba(152,190,101,0.8)]'
-            : 'bg-[#5B6268]'
-        }"></span>
+        ${renderStatusIcon(isActive, notif)}
         <div class="flex flex-col min-w-0">
           <div class="flex items-center gap-1.5">
             <span class="text-xs md:text-sm font-bold ${isActive ? 'text-[#51afef]' : 'text-[#DFDFDF]'} truncate">${session.name}</span>
@@ -284,6 +293,24 @@ function renderDrawerSessions() {
 export function renderSessions() {
   renderDrawerSessions();
   renderDesktopTabs();
+
+  // Update mobile header capsule indicator
+  const headerStatusDot = document.getElementById('header-status-dot');
+  if (headerStatusDot) {
+    const current = getCurrentSession();
+    const currentNotif = current ? getSessionNotification(current) : null;
+
+    if (currentNotif === 'input') {
+      headerStatusDot.innerHTML = `<svg class="w-3.5 h-3.5 pointer-events-none text-[#ECBE7B]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>`;
+      headerStatusDot.className = 'w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center';
+    } else if (currentNotif === 'settled') {
+      headerStatusDot.innerHTML = `<svg class="w-3.5 h-3.5 pointer-events-none text-[#98be65]" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>`;
+      headerStatusDot.className = 'w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center';
+    } else {
+      headerStatusDot.innerHTML = '';
+      headerStatusDot.className = 'dot connected status-dot flex-shrink-0';
+    }
+  }
 }
 
 export async function loadSessions(selectSessionName = null, autoConnect = true) {
@@ -347,6 +374,10 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
 }
 
 export function initSessions() {
+  setNotificationChangeCallback(() => {
+    renderSessions();
+  });
+
   if (btnOpenDrawer) {
     btnOpenDrawer.addEventListener('click', (e) => {
       e.preventDefault();

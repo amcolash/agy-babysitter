@@ -56,6 +56,8 @@ export function setupWebSocketServer(server) {
       return;
     }
 
+    ws.sessionName = sessionName;
+
     // Handle messages/actions coming from the browser
     ws.on('message', (message) => {
       touchWakelock(true);
@@ -69,7 +71,18 @@ export function setupWebSocketServer(server) {
           const payload = JSON.parse(raw);
           if (payload.type === 'resize' && payload.cols && payload.rows) {
             try {
-              ptyProcess.resize(Math.max(1, payload.cols), Math.max(1, payload.rows));
+              const newCols = Math.max(1, payload.cols);
+              const newRows = Math.max(1, payload.rows);
+              if (ptyProcess.cols !== newCols || ptyProcess.rows !== newRows) {
+                ptyProcess.resize(newCols, newRows);
+                // Notify other connected clients for this session about the resize reflow
+                const notice = JSON.stringify({ type: 'session_resized', session: sessionName });
+                wss.clients.forEach((client) => {
+                  if (client !== ws && client.readyState === WebSocket.OPEN && client.sessionName === sessionName) {
+                    client.send(notice);
+                  }
+                });
+              }
             } catch (e) {
               // Ignore resize errors when closing
             }

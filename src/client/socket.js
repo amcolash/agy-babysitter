@@ -1,4 +1,5 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice } from './terminal.js';
+import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized } from './notifications.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -203,6 +204,7 @@ export function connectTerminal(sessionName) {
   }
 
   currentSession = sessionName;
+  onSessionConnected(sessionName);
   updateStatus('connecting', `Connecting (${sessionName})...`);
 
   try {
@@ -249,11 +251,15 @@ export function connectTerminal(sessionName) {
           showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...');
           startPollingServerOnline();
           return;
+        } else if (payload.type === 'session_resized') {
+          onTerminalResized();
+          return;
         }
       } catch (e) {}
     }
 
     writeTerminal(event.data);
+    onTerminalDataReceived(event.data);
   };
 
   socket.onclose = () => {
@@ -268,6 +274,10 @@ export function connectTerminal(sessionName) {
 }
 
 export function sendInput(data) {
+  handleUserInteraction();
+  if (data && (data.includes('\r') || data.includes('\n'))) {
+    markTurnStarted();
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'input', data }));
   }
@@ -280,6 +290,8 @@ export function sendResize(cols, rows) {
 }
 
 export function sendAction(action) {
+  handleUserInteraction();
+  markTurnStarted();
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'action', action }));
   }
