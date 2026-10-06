@@ -1,4 +1,5 @@
 import { getCurrentSession, sendClearNotification } from './socket.js';
+import { getSetting } from './settings.js';
 
 let audioCtx = null;
 let audioUnlocked = false;
@@ -38,6 +39,17 @@ const SOUND_THROTTLE_MS = 5000;
  */
 export function playNotificationSound() {
   try {
+    // 1. Mobile haptic vibration if enabled
+    if (getSetting('vibrationEnabled') !== false) {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([20]);
+      }
+    }
+
+    // 2. Audio chime if enabled
+    if (!getSetting('soundEnabled')) {
+      return;
+    }
     const now = Date.now();
 
     // Check in-memory throttle
@@ -128,35 +140,8 @@ export function playNotificationSound() {
 export const playInputBellSound = playNotificationSound;
 export const playSettledSound = playNotificationSound;
 
-// Global pause and baseline sync during screen / window resizing
-let isResizing = false;
-let resizeTimeout = null;
-
 export function onTerminalResized() {
-  isResizing = true;
-  if (debounceCheckTimer) {
-    clearTimeout(debounceCheckTimer);
-    debounceCheckTimer = null;
-  }
-
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout);
-  }
-
-  // After resize reflow and screen redraw completely settles, silently capture the new baseline
-  resizeTimeout = setTimeout(() => {
-    isResizing = false;
-    resizeTimeout = null;
-    const sessionName = getCurrentSession();
-    if (sessionName) {
-      const state = getSessionState(sessionName);
-      state.lastSnapshot = getAbovePromptText();
-    }
-  }, 500);
-}
-
-function isResizingActive() {
-  return isResizing || resizeTimeout !== null;
+  // Terminal resize hook
 }
 
 // Session state storage: Map<sessionName, { lastSnapshot: string, notified: 'input'|'settled'|null }>
@@ -186,7 +171,7 @@ export function getSessionNotification(sessionName) {
 export function clearSessionNotification(sessionName) {
   if (!sessionName) return;
   const s = sessionStates.get(sessionName);
-  if (s) {
+  if (s && s.notified !== null) {
     s.notified = null;
     updatePageTitle();
     if (onNotificationChangeCallback) {
@@ -200,6 +185,7 @@ export function handleServerSessionNotification(sessionName, state) {
   if (!sessionName) return;
   const s = getSessionState(sessionName);
   const prevState = s.notified;
+  if (prevState === state) return;
   s.notified = state;
   updatePageTitle();
   if (onNotificationChangeCallback) {
@@ -212,20 +198,25 @@ export function handleServerSessionNotification(sessionName, state) {
 
 export function handleServerSessionNotificationsSync(states) {
   if (!states) return;
+  let changed = false;
   for (const [name, state] of Object.entries(states)) {
     const s = getSessionState(name);
-    s.notified = state;
+    if (s.notified !== state) {
+      s.notified = state;
+      changed = true;
+    }
   }
-  updatePageTitle();
-  if (onNotificationChangeCallback) {
-    onNotificationChangeCallback(null, null);
+  if (changed) {
+    updatePageTitle();
+    if (onNotificationChangeCallback) {
+      onNotificationChangeCallback(null, null);
+    }
   }
 }
 
 export function onSessionConnected(sessionName) {
   if (!sessionName) return;
   const state = getSessionState(sessionName);
-  // Reset snapshot so initial buffer render is captured as baseline without sound
   state.lastSnapshot = null;
   state.notified = null;
   clearSessionNotification(sessionName);
@@ -235,14 +226,20 @@ export function markTurnStarted(sessionName = null) {
   const target = sessionName || getCurrentSession();
   if (!target) return;
   unlockAudio();
-  clearSessionNotification(target);
+  const s = sessionStates.get(target);
+  if (s && s.notified !== null) {
+    clearSessionNotification(target);
+  }
 }
 
 export function handleUserInteraction() {
   unlockAudio();
   const current = getCurrentSession();
   if (current) {
-    clearSessionNotification(current);
+    const s = sessionStates.get(current);
+    if (s && s.notified !== null) {
+      clearSessionNotification(current);
+    }
   }
 }
 

@@ -286,10 +286,6 @@ export function sendClearNotification(sessionName) {
 }
 
 export function sendInput(data) {
-  handleUserInteraction();
-  if (data && (data.includes('\r') || data.includes('\n'))) {
-    markTurnStarted();
-  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'input', data }));
   }

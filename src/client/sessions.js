@@ -73,6 +73,32 @@ export function syncSessionToStorageAndUrl(sessionName) {
   } catch (e) {}
 }
 
+export function switchToSession(sessionName) {
+  if (!sessionName) return;
+  if (sessionName !== getCurrentSession()) {
+    clearReconnectTimer();
+    syncSessionToStorageAndUrl(sessionName);
+    connectTerminal(sessionName);
+    renderSessions();
+  }
+}
+
+export function switchRelativeSession(direction) {
+  if (!activeSessionsList || activeSessionsList.length <= 1) return;
+  const current = getCurrentSession();
+  const currentIndex = activeSessionsList.findIndex((s) => s.name === current);
+  let nextIndex = 0;
+  if (currentIndex === -1) {
+    nextIndex = direction > 0 ? 0 : activeSessionsList.length - 1;
+  } else {
+    nextIndex = (currentIndex + direction + activeSessionsList.length) % activeSessionsList.length;
+  }
+  const target = activeSessionsList[nextIndex];
+  if (target) {
+    switchToSession(target.name);
+  }
+}
+
 export function clearSessionFromStorageAndUrl() {
   if (currentSessionLabel) {
     currentSessionLabel.textContent = 'No Session';

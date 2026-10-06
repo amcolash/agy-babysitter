@@ -4,6 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
+import { switchRelativeSession } from "./sessions.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
@@ -108,9 +109,6 @@ export function initTerminal(onInput, onResize) {
   configureHelperTextarea();
 
   term.onData((data) => {
-    if (data.includes('\r') || data.includes('\n')) {
-      markTurnStarted();
-    }
     if (onInput) onInput(data);
   });
 
@@ -352,10 +350,28 @@ export function initTerminal(onInput, onResize) {
   document.addEventListener('selectionchange', updateSelectionFromAllSources);
   window.addEventListener('mouseup', updateSelectionFromAllSources);
 
-  // Global window keydown interceptor in capture phase for Ctrl+Shift+C and Ctrl+Shift+V
+  // Global window keydown interceptor in capture phase
   window.addEventListener(
     'keydown',
     (e) => {
+      // Tab switching: Ctrl+Shift+[ (prev) and Ctrl+Shift+] (next)
+      const isPrevTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '[' || e.key === '{' || e.code === 'BracketLeft');
+      const isNextTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === ']' || e.key === '}' || e.code === 'BracketRight');
+
+      if (isPrevTab) {
+        e.preventDefault();
+        e.stopPropagation();
+        switchRelativeSession(-1);
+        return;
+      }
+
+      if (isNextTab) {
+        e.preventDefault();
+        e.stopPropagation();
+        switchRelativeSession(1);
+        return;
+      }
+
       const isC = e.key === 'C' || e.key === 'c' || e.code === 'KeyC' || e.keyCode === 67;
       const isV = e.key === 'V' || e.key === 'v' || e.code === 'KeyV' || e.keyCode === 86;
 
@@ -382,8 +398,29 @@ export function initTerminal(onInput, onResize) {
     { capture: true }
   );
 
-  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection)
+  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/])
   term.attachCustomKeyEventHandler((e) => {
+    const isPrevTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '[' || e.key === '{' || e.code === 'BracketLeft');
+    const isNextTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === ']' || e.key === '}' || e.code === 'BracketRight');
+
+    if (isPrevTab) {
+      if (e.type === 'keydown') {
+        switchRelativeSession(-1);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    if (isNextTab) {
+      if (e.type === 'keydown') {
+        switchRelativeSession(1);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
     const isC = e.key === 'C' || e.key === 'c' || e.code === 'KeyC' || e.keyCode === 67;
     const isV = e.key === 'V' || e.key === 'v' || e.code === 'KeyV' || e.keyCode === 86;
 
