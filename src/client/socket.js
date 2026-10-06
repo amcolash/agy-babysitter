@@ -43,6 +43,9 @@ export function isSocketConnected() {
   return Boolean(ws && ws.readyState === WebSocket.OPEN);
 }
 
+let overlayTimer = null;
+const DISCONNECT_OVERLAY_DELAY_MS = 5000; // 5-second grace period before showing full-screen overlay
+
 export function isServerUpdatingState() {
   return isServerUpdating;
 }
@@ -56,7 +59,23 @@ export function showDisconnectedOverlay(title, subtitle) {
   disconnectedOverlay.classList.remove('hidden');
 }
 
+export function scheduleDisconnectedOverlay(title, subtitle, delayMs = DISCONNECT_OVERLAY_DELAY_MS) {
+  if (overlayTimer) return;
+  overlayTimer = setTimeout(() => {
+    overlayTimer = null;
+    showDisconnectedOverlay(title, subtitle);
+  }, delayMs);
+}
+
+export function clearDisconnectedOverlayTimer() {
+  if (overlayTimer) {
+    clearTimeout(overlayTimer);
+    overlayTimer = null;
+  }
+}
+
 export function hideDisconnectedOverlay() {
+  clearDisconnectedOverlayTimer();
   if (disconnectedOverlay) {
     disconnectedOverlay.classList.add('hidden');
   }
@@ -96,6 +115,7 @@ export function clearReconnectTimer() {
 
 export function disconnectTerminal() {
   clearReconnectTimer();
+  clearDisconnectedOverlayTimer();
   if (ws) {
     const oldWs = ws;
     ws = null;
@@ -134,12 +154,11 @@ export function startPollingServerOnline() {
 if (typeof window !== 'undefined') {
   window.addEventListener('offline', () => {
     updateStatus('disconnected', 'Network offline');
-    showDisconnectedOverlay('Network Offline', 'Your device appears to be offline. Reconnecting once connection is restored...');
+    scheduleDisconnectedOverlay('Network Offline', 'Your device appears to be offline. Reconnecting once connection is restored...', 5000);
   });
 
   window.addEventListener('online', () => {
     updateStatus('connecting', 'Network restored - connecting...');
-    showDisconnectedOverlay('Connecting to Server...', 'Network connection restored. Connecting to server...');
     if (currentSession) {
       connectTerminal(currentSession);
     }
@@ -152,21 +171,22 @@ export function scheduleReconnect(sessionName) {
   if (!targetSession) return;
 
   if (isServerUpdating) {
-    updateStatus('connecting', 'Server updating - reconnecting...');
-    showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...');
+    updateStatus('connecting', 'Reconnecting...');
+    scheduleDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...', 5000);
     startPollingServerOnline();
     return;
   }
 
-  updateStatus('disconnected', `Disconnected (${targetSession}) - reconnecting in 2s...`);
-  showDisconnectedOverlay('Connecting to Server...', 'Looks like you are disconnected from the server. Attempting to reconnect...');
+  updateStatus('connecting', `Reconnecting (${targetSession})...`);
+  // Delay full screen overlay for 5 seconds so brief server restarts happen completely seamlessly without flashing
+  scheduleDisconnectedOverlay('Connecting to Server...', 'Looks like you are disconnected from the server. Attempting to reconnect...', 5000);
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (currentSession) {
       connectTerminal(currentSession);
     }
-  }, RECONNECT_DELAY_MS);
+  }, 1200);
 }
 
 export function connectTerminal(sessionName) {
