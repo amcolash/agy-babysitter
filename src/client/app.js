@@ -5,12 +5,14 @@ import { initModal, initInfo } from './modal.js';
 import { initInputModal } from './inputModal.js';
 import { initActions } from './actions.js';
 import { initNotifications } from './notifications.js';
+import { initSettings } from './settings.js';
 
 import { registerSW } from 'virtual:pwa-register';
 
 // Initialize all UI subsystems
 initNotifications();
 initTerminal(sendInput, sendResize);
+initSettings();
 initSessions();
 initModal();
 initInputModal();

@@ -97,16 +97,30 @@
           <span class="dot disconnected status-dot"></span>
           <span class="status-text text-[#bbc2cf] text-xs truncate max-w-[190px]">Disconnected</span>
         </div>
-        <button
-          type="button"
-          title="Reload Page"
-          aria-label="Reload Page"
-          class="btn-status-reload text-[#5B6268] hover:text-[#51afef] active:text-[#46D9FF] hover:scale-110 active:scale-95 transition flex items-center justify-center p-1 cursor-pointer rounded hover:bg-[#21242b]"
-        >
-          <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
+        <div class="flex items-center gap-1.5">
+          <button
+            type="button"
+            id="btn-drawer-settings"
+            title="Settings"
+            aria-label="Settings"
+            class="text-[#5B6268] hover:text-[#51afef] active:text-[#46D9FF] hover:scale-110 active:scale-95 transition flex items-center justify-center p-1 cursor-pointer rounded hover:bg-[#21242b]"
+          >
+            <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            title="Reload Page"
+            aria-label="Reload Page"
+            class="btn-status-reload text-[#5B6268] hover:text-[#51afef] active:text-[#46D9FF] hover:scale-110 active:scale-95 transition flex items-center justify-center p-1 cursor-pointer rounded hover:bg-[#21242b]"
+          >
+            <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -156,12 +170,24 @@
             </button>
           </div>
 
-          <!-- Right: Status indicator & Reload Control -->
-          <div class="flex items-center gap-2 px-2.5 my-auto flex-shrink-0">
-            <div class="hidden md:flex items-center gap-1.5 text-[11px] text-[#5B6268] select-none">
+          <!-- Right: Status indicator & Settings / Reload Controls -->
+          <div class="flex items-center gap-1.5 px-2 md:px-2.5 my-auto flex-shrink-0">
+            <div class="hidden md:flex items-center gap-1.5 text-[11px] text-[#5B6268] select-none mr-1">
               <span class="dot connected status-dot"></span>
               <span class="status-text truncate max-w-[120px]">Connected</span>
             </div>
+            <button
+              id="btn-open-settings"
+              type="button"
+              title="Settings (Sound, Cursor, Fonts, Vibration)"
+              aria-label="Settings"
+              class="flex items-center justify-center w-7 h-7 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] hover:border-[#51afef]/60 text-[#5B6268] hover:text-[#51afef] transition shadow-xs cursor-pointer touch-manipulation"
+            >
+              <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
             <button
               id="btn-status-reload"
               type="button"
@@ -559,6 +585,179 @@
               </button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Settings Modal -->
+      <div
+        id="settings-modal-overlay"
+        class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      >
+        <div
+          class="modal bg-[#21242b] border border-[#3f444a] rounded-xl p-5 w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl shadow-black/60"
+        >
+          <!-- Modal Header -->
+          <div class="modal-header flex items-center justify-between pb-3 mb-3 border-b border-[#3f444a]">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#51afef] shadow-sm shadow-[#51afef]"></span>
+              <h3 class="font-bold text-[#DFDFDF] text-base md:text-lg">Settings</h3>
+            </div>
+            <button
+              id="btn-close-settings-modal"
+              class="text-[#5B6268] hover:text-[#DFDFDF] text-xl leading-none px-1.5 py-0.5 rounded hover:bg-[#282c34] transition cursor-pointer"
+              aria-label="Close settings modal"
+            >
+              &times;
+            </button>
+          </div>
+
+          <!-- Settings Content -->
+          <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+            <!-- Section: Notifications & Feedback -->
+            <div class="space-y-2.5">
+              <h4 class="text-[11px] font-bold uppercase tracking-wider text-[#5B6268]">Alerts & Feedback</h4>
+
+              <!-- Sound Notification Toggle -->
+              <label class="flex items-center justify-between p-2.5 rounded-lg bg-[#1b2229] border border-[#3f444a] cursor-pointer hover:border-[#51afef]/40 transition select-none">
+                <div class="flex items-center gap-2.5">
+                  <span class="text-base">🔔</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-[#DFDFDF]">Notification Chime</span>
+                    <span class="text-[11px] text-[#5B6268]">Play audio chime on input & completion</span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="setting-sound-enabled"
+                  class="w-4 h-4 rounded bg-[#21242b] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
+                />
+              </label>
+
+              <!-- Vibration Toggle -->
+              <label class="flex items-center justify-between p-2.5 rounded-lg bg-[#1b2229] border border-[#3f444a] cursor-pointer hover:border-[#51afef]/40 transition select-none">
+                <div class="flex items-center gap-2.5">
+                  <span class="text-base">📳</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-[#DFDFDF]">Haptic Vibration</span>
+                    <span class="text-[11px] text-[#5B6268]">Vibrate mobile device on alert</span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="setting-vibration-enabled"
+                  class="w-4 h-4 rounded bg-[#21242b] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            <!-- Section: Terminal Appearance -->
+            <div class="space-y-3 pt-3 border-t border-[#3f444a]">
+              <h4 class="text-[11px] font-bold uppercase tracking-wider text-[#5B6268]">Terminal Appearance</h4>
+
+              <!-- Cursor Shape -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-[#bbc2cf]">Cursor Style</label>
+                <div class="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    data-cursor-style="bar"
+                    class="btn-cursor-style flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-[#1b2229] border border-[#3f444a] text-xs text-[#DFDFDF] hover:border-[#51afef] transition cursor-pointer"
+                  >
+                    <span>|</span>
+                    <span>I-Beam</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-cursor-style="block"
+                    class="btn-cursor-style flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-[#1b2229] border border-[#3f444a] text-xs text-[#DFDFDF] hover:border-[#51afef] transition cursor-pointer"
+                  >
+                    <span>█</span>
+                    <span>Block</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-cursor-style="underline"
+                    class="btn-cursor-style flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-[#1b2229] border border-[#3f444a] text-xs text-[#DFDFDF] hover:border-[#51afef] transition cursor-pointer"
+                  >
+                    <span>_</span>
+                    <span>Underline</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Cursor Blink -->
+              <label class="flex items-center justify-between p-2.5 rounded-lg bg-[#1b2229] border border-[#3f444a] cursor-pointer hover:border-[#51afef]/40 transition select-none">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-[#DFDFDF]">Cursor Blink</span>
+                  <span class="text-[11px] text-[#5B6268]">Animate cursor blinking in active terminal</span>
+                </div>
+                <input
+                  type="checkbox"
+                  id="setting-cursor-blink"
+                  class="w-4 h-4 rounded bg-[#21242b] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
+                />
+              </label>
+
+              <!-- Font Size -->
+              <div class="flex flex-col gap-1.5">
+                <div class="flex items-center justify-between">
+                  <label for="setting-font-size" class="text-xs font-semibold text-[#bbc2cf]">Font Size</label>
+                  <span id="setting-font-size-val" class="text-xs font-mono font-bold text-[#51afef]">14px</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    id="btn-font-dec"
+                    class="w-8 h-8 rounded-lg bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] text-[#DFDFDF] text-sm font-bold flex items-center justify-center transition cursor-pointer"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    id="setting-font-size"
+                    min="9"
+                    max="28"
+                    step="1"
+                    class="flex-1 accent-[#51afef] bg-[#1b2229] h-2 rounded-lg cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    id="btn-font-inc"
+                    class="w-8 h-8 rounded-lg bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] text-[#DFDFDF] text-sm font-bold flex items-center justify-center transition cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <!-- Font Family -->
+              <div class="flex flex-col gap-1.5">
+                <label for="setting-font-family" class="text-xs font-semibold text-[#bbc2cf]">Font Family</label>
+                <select
+                  id="setting-font-family"
+                  class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-lg px-3 py-2 text-xs outline-none transition font-mono cursor-pointer"
+                >
+                  <option value="SauceCodePro Nerd Font Mono">SauceCodePro Nerd Font (Default)</option>
+                  <option value="JetBrains Mono, monospace">JetBrains Mono</option>
+                  <option value="Fira Code, monospace">Fira Code</option>
+                  <option value="Cascadia Code, monospace">Cascadia Code</option>
+                  <option value="Menlo, Monaco, Consolas, monospace">Menlo / Monaco / Consolas</option>
+                  <option value="ui-monospace, monospace">System Monospace</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="modal-actions flex items-center justify-end gap-2.5 pt-3 mt-3 border-t border-[#3f444a]">
+            <button
+              type="button"
+              id="btn-done-settings-modal"
+              class="px-4 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
         </div>
       </div>
     </div>
