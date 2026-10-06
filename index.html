@@ -225,7 +225,18 @@
               <span class="w-2.5 h-2.5 rounded-full bg-[#51afef] shadow-sm shadow-[#51afef]"></span>
               <h3 class="font-bold text-[#DFDFDF] text-sm md:text-base">Terminal Input</h3>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                id="btn-input-grab-terminal"
+                title="Grab current uncommitted command/prompt from terminal"
+                class="flex items-center gap-1 text-[#51afef] hover:text-[#46D9FF] hover:bg-[#51afef]/10 px-2 py-1 rounded border border-[#51afef]/40 text-xs font-semibold transition cursor-pointer active:scale-95"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span>Grab</span>
+              </button>
               <button
                 type="button"
                 id="btn-input-history-prev"
@@ -285,6 +296,14 @@
           <div class="flex items-center gap-1.5 overflow-x-auto py-1">
             <button
               type="button"
+              id="btn-chip-grab"
+              title="Grab text from active terminal prompt or selection"
+              class="px-2.5 py-1 rounded bg-[#21242b] border border-[#51afef]/60 text-[#51afef] hover:bg-[#51afef]/20 text-xs font-bold transition flex-shrink-0 cursor-pointer active:scale-95 flex items-center gap-1"
+            >
+              📥 Grab Prompt
+            </button>
+            <button
+              type="button"
               id="btn-chip-esc"
               class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#ff6c6b] hover:text-[#ff6c6b] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
             >
@@ -321,18 +340,29 @@
           </div>
 
           <!-- Actions & Send Options -->
-          <div class="flex items-center justify-between pt-2 border-t border-[#3f444a] gap-2">
-            <label class="flex items-center gap-2 text-xs text-[#bbc2cf] cursor-pointer select-none">
-              <input
-                type="checkbox"
-                id="input-send-enter-checkbox"
-                checked
-                class="rounded bg-[#1b2229] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
-              />
-              <span>Append Enter (↵)</span>
-            </label>
+          <div class="flex items-center justify-between pt-2 border-t border-[#3f444a] gap-2 flex-wrap sm:flex-nowrap">
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5 text-xs text-[#bbc2cf] cursor-pointer select-none" title="Send Enter (↵) after input">
+                <input
+                  type="checkbox"
+                  id="input-send-enter-checkbox"
+                  checked
+                  class="rounded bg-[#1b2229] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
+                />
+                <span>Enter (↵)</span>
+              </label>
 
-            <div class="flex items-center gap-2">
+              <label class="flex items-center gap-1.5 text-xs text-[#bbc2cf] cursor-pointer select-none" title="Clear current uncommitted line on terminal before sending (Ctrl+U)">
+                <input
+                  type="checkbox"
+                  id="input-replace-line-checkbox"
+                  class="rounded bg-[#1b2229] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
+                />
+                <span>Replace Line</span>
+              </label>
+            </div>
+
+            <div class="flex items-center gap-2 ml-auto">
               <button
                 type="button"
                 id="btn-cancel-input-popup"

@@ -311,3 +311,96 @@ export function getRecentTerminalLines(numLines = 25) {
     return [];
   }
 }
+
+/**
+ * Strip shell or agy prompt prefixes from raw terminal line
+ * @param {string} rawLine
+ * @returns {string}
+ */
+export function stripPromptPrefix(rawLine) {
+  if (!rawLine) return '';
+  const text = rawLine.trim();
+
+  // Standard shell prompts like "user@host:~/path$ command" or "user@host:~# command"
+  const shellPromptRegex = /^.*?[@:][^$#%❯›>]*?[\$#%❯›>]\s+/;
+  if (shellPromptRegex.test(text)) {
+    return text.replace(shellPromptRegex, '');
+  }
+
+  // Single symbol prompts like "> ", "› ", "❯ ", "● ", "▶ ", "» ", "? ", "$ ", "# "
+  const symbolPromptRegex = /^([>›❯●▶»?$\#]|>{2,3}|\.\.\.)\s+/;
+  if (symbolPromptRegex.test(text)) {
+    return text.replace(symbolPromptRegex, '');
+  }
+
+  // Named prompts like "agy> ", "input> ", "search: "
+  const namedPromptRegex = /^[a-zA-Z0-9_\-\.]+([>:\?])\s+/;
+  if (namedPromptRegex.test(text)) {
+    return text.replace(namedPromptRegex, '');
+  }
+
+  return text;
+}
+
+/**
+ * Extract the current uncommitted command or prompt from the terminal buffer
+ * @returns {string}
+ */
+export function getCurrentTerminalInput() {
+  try {
+    // 1. Check if user currently has highlighted/selected text in terminal
+    const selection = term.getSelection()?.trim();
+    if (selection) {
+      return selection;
+    }
+
+    const buffer = term.buffer.active;
+    const currentAbsoluteY = buffer.baseY + buffer.cursorY;
+
+    // First, inspect the logical line at cursor (including any wrapped lines)
+    let startY = currentAbsoluteY;
+    while (startY > 0) {
+      const line = buffer.getLine(startY);
+      if (!line || !line.isWrapped) break;
+      startY--;
+    }
+
+    let endY = currentAbsoluteY;
+    const totalLines = buffer.length;
+    while (endY < totalLines - 1) {
+      const nextLine = buffer.getLine(endY + 1);
+      if (!nextLine || !nextLine.isWrapped) break;
+      endY++;
+    }
+
+    let fullText = '';
+    for (let y = startY; y <= endY; y++) {
+      const line = buffer.getLine(y);
+      if (line) {
+        fullText += line.translateToString(y === endY);
+      }
+    }
+
+    const stripped = stripPromptPrefix(fullText);
+    if (stripped) {
+      return stripped;
+    }
+
+    // If empty at cursor, search recent lines above cursor for active prompt
+    for (let y = currentAbsoluteY; y >= Math.max(0, currentAbsoluteY - 6); y--) {
+      const line = buffer.getLine(y);
+      if (line) {
+        const raw = line.translateToString(true);
+        const parsed = stripPromptPrefix(raw);
+        if (parsed && parsed !== raw) {
+          return parsed;
+        }
+      }
+    }
+
+    return fullText.trim();
+  } catch (e) {
+    console.warn('Failed to extract terminal input:', e);
+    return '';
+  }
+}

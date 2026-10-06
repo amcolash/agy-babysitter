@@ -1,18 +1,22 @@
 import { sendInput } from './socket.js';
-import { term } from './terminal.js';
+import { term, getCurrentTerminalInput } from './terminal.js';
+import { showToast } from './toast.js';
 
 const inputPopupOverlay = document.getElementById('input-popup-overlay');
 const textarea = document.getElementById('terminal-input-textarea');
 const sendEnterCheckbox = document.getElementById('input-send-enter-checkbox');
+const replaceLineCheckbox = document.getElementById('input-replace-line-checkbox');
 const btnSend = document.getElementById('btn-send-input-popup');
 const btnCancel = document.getElementById('btn-cancel-input-popup');
 const btnClose = document.getElementById('btn-close-input-popup');
 const btnClear = document.getElementById('btn-input-clear-text');
 const btnHistoryPrev = document.getElementById('btn-input-history-prev');
 const btnHistoryNext = document.getElementById('btn-input-history-next');
+const btnGrabTerminal = document.getElementById('btn-input-grab-terminal');
 const charCount = document.getElementById('input-char-count');
 
 // Helper key chips
+const btnChipGrab = document.getElementById('btn-chip-grab');
 const btnChipEsc = document.getElementById('btn-chip-esc');
 const btnChipCtrlC = document.getElementById('btn-chip-ctrl-c');
 const btnChipTab = document.getElementById('btn-chip-tab');
@@ -98,6 +102,22 @@ export function openInputModal(initialText = '') {
   }, 50);
 }
 
+export function grabFromTerminal() {
+  const text = getCurrentTerminalInput();
+  if (text) {
+    textarea.value = text;
+    updateCharCount();
+    if (replaceLineCheckbox) {
+      replaceLineCheckbox.checked = true;
+    }
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    showToast('Grabbed command from terminal', 'info');
+  } else {
+    showToast('No active command found in terminal', 'warning');
+  }
+}
+
 export function closeInputModal() {
   if (!inputPopupOverlay || !textarea) return;
   isOpen = false;
@@ -109,6 +129,12 @@ export function sendCurrentInput() {
   if (!textarea) return;
   const text = textarea.value;
   const sendEnter = sendEnterCheckbox ? sendEnterCheckbox.checked : true;
+  const replaceLine = replaceLineCheckbox ? replaceLineCheckbox.checked : false;
+
+  if (replaceLine) {
+    // Send Ctrl+U (\x15) to clear the existing uncommitted prompt line on terminal
+    sendInput('\x15');
+  }
 
   if (text.length > 0) {
     addToHistory(text);
@@ -118,6 +144,10 @@ export function sendCurrentInput() {
     sendInput('\r');
   }
 
+  if (replaceLineCheckbox) {
+    replaceLineCheckbox.checked = false;
+  }
+
   textarea.value = '';
   updateCharCount();
   closeInputModal();
@@ -125,6 +155,20 @@ export function sendCurrentInput() {
 
 export function initInputModal() {
   loadHistory();
+
+  if (btnGrabTerminal) {
+    btnGrabTerminal.addEventListener('click', (e) => {
+      e.preventDefault();
+      grabFromTerminal();
+    });
+  }
+
+  if (btnChipGrab) {
+    btnChipGrab.addEventListener('click', (e) => {
+      e.preventDefault();
+      grabFromTerminal();
+    });
+  }
 
   if (btnSend) {
     btnSend.addEventListener('click', (e) => {
