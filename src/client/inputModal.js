@@ -12,11 +12,9 @@ const btnClose = document.getElementById('btn-close-input-popup');
 const btnClear = document.getElementById('btn-input-clear-text');
 const btnHistoryPrev = document.getElementById('btn-input-history-prev');
 const btnHistoryNext = document.getElementById('btn-input-history-next');
-const btnGrabTerminal = document.getElementById('btn-input-grab-terminal');
 const charCount = document.getElementById('input-char-count');
 
 // Helper key chips
-const btnChipGrab = document.getElementById('btn-chip-grab');
 const btnChipEsc = document.getElementById('btn-chip-esc');
 const btnChipCtrlC = document.getElementById('btn-chip-ctrl-c');
 const btnChipTab = document.getElementById('btn-chip-tab');
@@ -84,15 +82,29 @@ export function openInputModal(initialText = '') {
   loadHistory();
   historyIndex = inputHistory.length;
 
-  if (initialText) {
-    textarea.value = initialText;
+  let textToSet = initialText;
+  let hasGrabbedFromTerminal = false;
+
+  // Always automatically grab uncommitted text from terminal prompt or selection if not provided
+  if (!textToSet) {
+    const grabbed = getCurrentTerminalInput();
+    if (grabbed) {
+      textToSet = grabbed;
+      hasGrabbedFromTerminal = true;
+    }
   }
+
+  textarea.value = textToSet || '';
+  if (replaceLineCheckbox) {
+    replaceLineCheckbox.checked = hasGrabbedFromTerminal;
+  }
+
   updateCharCount();
   updateHistoryButtons();
 
   inputPopupOverlay.classList.remove('hidden');
 
-  // Focus textarea for mobile software keyboard
+  // Focus textarea for mobile software keyboard and place cursor at the end
   textarea.focus();
   setTimeout(() => {
     if (isOpen && textarea) {
@@ -100,22 +112,6 @@ export function openInputModal(initialText = '') {
       textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     }
   }, 50);
-}
-
-export function grabFromTerminal() {
-  const text = getCurrentTerminalInput();
-  if (text) {
-    textarea.value = text;
-    updateCharCount();
-    if (replaceLineCheckbox) {
-      replaceLineCheckbox.checked = true;
-    }
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    showToast('Grabbed command from terminal', 'info');
-  } else {
-    showToast('No active command found in terminal', 'warning');
-  }
 }
 
 export function closeInputModal() {
@@ -155,20 +151,6 @@ export function sendCurrentInput() {
 
 export function initInputModal() {
   loadHistory();
-
-  if (btnGrabTerminal) {
-    btnGrabTerminal.addEventListener('click', (e) => {
-      e.preventDefault();
-      grabFromTerminal();
-    });
-  }
-
-  if (btnChipGrab) {
-    btnChipGrab.addEventListener('click', (e) => {
-      e.preventDefault();
-      grabFromTerminal();
-    });
-  }
 
   if (btnSend) {
     btnSend.addEventListener('click', (e) => {
