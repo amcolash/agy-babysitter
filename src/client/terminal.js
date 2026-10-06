@@ -36,7 +36,9 @@ let lastSelection = '';
 
 export const term = new Terminal({
   cursorBlink: true,
-  cursorStyle: "block",
+  cursorStyle: "bar",
+  cursorWidth: 2,
+  cursorInactiveStyle: "bar",
   fontSize: initialFontSize,
   fontFamily:
     '"SauceCodePro Nerd Font Mono", "SauceCodePro Nerd Font", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
