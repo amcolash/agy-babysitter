@@ -161,6 +161,16 @@ export async function getUniqueSessionName(cwdOrName) {
 }
 
 /**
+ * Wraps a command string to ensure full ANSI & 24-bit TrueColor support inside Zellij panes
+ * @param {string} cmd
+ * @returns {string}
+ */
+export function wrapCommandWithColorEnv(cmd) {
+  const target = (cmd || config.DEFAULT_COMMAND || 'agy').trim();
+  return `export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1 CLICOLOR=1 CLICOLOR_FORCE=1; exec ${target}`;
+}
+
+/**
  * Create a new detached zellij session
  * @param {Object} options
  * @param {string} [options.name]
@@ -171,6 +181,7 @@ export async function getUniqueSessionName(cwdOrName) {
 export async function createSession({ name, command, cwd }) {
   const sessionCwd = resolveTilde((cwd || config.DEFAULT_CWD).trim());
   const sessionCommand = (command || config.DEFAULT_COMMAND).trim() || 'agy';
+  const wrappedCommand = wrapCommandWithColorEnv(sessionCommand);
 
   let sessionName = name ? sanitizeSessionName(name) : sanitizeSessionName(path.basename(sessionCwd));
 
@@ -178,10 +189,18 @@ export async function createSession({ name, command, cwd }) {
     sessionName = await getUniqueSessionName(sessionName);
   }
 
-  // Spawn zellij session detached in the background (-b)
-  const args = ['attach', '-b', sessionName, '--', 'bash', '-c', sessionCommand];
+  // Spawn zellij session detached in the background (-b) with full color support
+  const args = ['attach', '-b', sessionName, '--', 'bash', '-c', wrappedCommand];
   await execFileAsync('zellij', args, {
-    cwd: sessionCwd
+    cwd: sessionCwd,
+    env: {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      COLORFGBG: '15;0',
+      FORCE_COLOR: '1',
+      LANG: process.env.LANG || 'en_US.UTF-8'
+    }
   });
 
   sessionMeta.set(sessionName, { cwd: sessionCwd, command: sessionCommand });

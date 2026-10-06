@@ -24,68 +24,148 @@
     <link rel="stylesheet" href="/src/client/style.css" />
   </head>
   <body class="h-full w-full bg-[#282c34] text-[#bbc2cf] font-mono antialiased overflow-hidden">
-    <div id="app-container" class="flex flex-col h-screen h-[100dvh] w-screen p-2 md:p-3 gap-2 relative">
-      <!-- Combined Top Control & Action Bar -->
-      <header
-        id="controls-bar"
-        class="flex flex-wrap items-center justify-between bg-[#21242b] border border-[#3f444a] rounded-lg px-2.5 py-1.5 md:px-3 md:py-2 gap-2 shadow-lg shadow-black/40 select-none"
-      >
-        <!-- Session Controls -->
-        <div class="session-controls flex items-center gap-1.5 flex-1 sm:flex-initial min-w-[200px]">
-          <label for="session-select" class="sr-only">Session:</label>
-          <div class="session-select-wrapper flex-1 relative min-w-[120px] max-w-xs">
-            <select
-              id="session-select"
-              title="Active sessions"
-              class="w-full bg-[#1b2229] text-[#DFDFDF] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] rounded-md px-2.5 py-1.5 text-xs md:text-sm outline-none cursor-pointer transition"
-            >
-              <option value="">Loading sessions...</option>
-            </select>
-          </div>
-          <button
-            id="btn-kill-session"
-            title="Close/kill selected session"
-            class="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-md bg-[#282c34] border border-[#ff6c6b]/40 hover:bg-[#ff6c6b] hover:border-[#ff6c6b] text-[#ff6c6b] hover:text-[#1b2229] transition duration-150 cursor-pointer flex-shrink-0 text-xs md:text-sm font-bold"
-            aria-label="Kill Session"
-          >
-            ✕
-          </button>
-          <button
-            id="btn-open-modal"
-            class="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-sm shadow-black/40 cursor-pointer flex-shrink-0"
-          >
-            <span>+</span> New
-          </button>
-        </div>
+    <!-- Slide-over Sessions Drawer -->
+    <div
+      id="drawer-backdrop"
+      class="fixed inset-0 bg-black/60 backdrop-blur-xs z-40"
+    ></div>
 
-        <!-- Connection Status -->
-        <div
-          id="connection-status-box"
-          title="Disconnected"
-          class="connection-status flex items-center gap-1.5 sm:gap-2 bg-[#1b2229] border border-[#3f444a] px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0 cursor-default"
-        >
-          <span id="status-dot" class="dot disconnected"></span>
-          <span id="status-text" class="hidden sm:inline text-[#bbc2cf] text-xs max-w-[160px] sm:max-w-none truncate">Disconnected</span>
+    <aside
+      id="sessions-drawer"
+      class="fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] bg-[#21242b] border-r border-[#3f444a] rounded-r-2xl shadow-2xl z-50 flex flex-col justify-between overflow-hidden"
+      aria-label="Sessions Menu"
+    >
+      <!-- Drawer Header -->
+      <div class="p-3.5 sm:p-4 border-b border-[#3f444a] flex items-center justify-between">
+        <div class="flex items-center gap-3">
           <button
-            id="btn-status-reload"
+            id="btn-close-drawer"
             type="button"
-            title="Reload Page"
-            aria-label="Reload Page"
-            class="text-[#5B6268] hover:text-[#51afef] active:text-[#46D9FF] hover:scale-110 active:scale-95 transition flex items-center justify-center p-0.5 cursor-pointer ml-0.5"
+            class="flex items-center justify-center w-8 h-8 rounded-lg bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] hover:border-[#51afef]/60 text-[#bbc2cf] hover:text-[#51afef] transition shadow-sm shadow-black/40 cursor-pointer backdrop-blur-xs touch-manipulation focus:outline-none focus:ring-1 focus:ring-[#51afef]"
+            aria-label="Close drawer"
+            title="Close menu"
           >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <svg class="w-4.5 h-4.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-md bg-[#1b2229] border border-[#3f444a] flex items-center justify-center text-[#51afef] font-bold text-[11px]">
+              agy
+            </div>
+            <h2 class="text-sm font-bold text-[#DFDFDF]">Sessions</h2>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <!-- Terminal Container -->
-      <main
-        id="terminal-container"
-        class="flex-1 min-h-0 bg-[#1b2229] border border-[#3f444a] focus-within:border-[#51afef]/70 rounded-lg overflow-hidden p-1 relative"
-      >
-        <div id="terminal" class="w-full h-full"></div>
+      <!-- Drawer Content: New Session Button & Active Sessions List -->
+      <div class="flex-1 overflow-y-auto p-3.5 sm:p-4 flex flex-col gap-3 min-h-0">
+        <!-- New Session Action -->
+        <button
+          id="btn-drawer-new-session"
+          class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition shadow-sm shadow-black/40 cursor-pointer"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>New Session</span>
+        </button>
+
+        <!-- Active Sessions Section -->
+        <div class="flex flex-col gap-2 mt-1">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-[#5B6268]">Active Sessions</span>
+            <span id="drawer-session-count" class="text-[10px] px-1.5 py-0.5 rounded bg-[#1b2229] text-[#5B6268] border border-[#3f444a]">0</span>
+          </div>
+
+          <!-- Vertical Session List Container -->
+          <div id="drawer-sessions-list" class="flex flex-col gap-1.5 overflow-y-auto">
+            <!-- Rendered dynamically by sessions.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Drawer Footer: Connection Info -->
+      <div class="p-3 bg-[#1b2229]/70 border-t border-[#3f444a] flex items-center justify-between">
+        <div
+          title="Connection Status"
+          class="connection-status-box flex items-center gap-2 text-xs font-medium cursor-default"
+        >
+          <span class="dot disconnected status-dot"></span>
+          <span class="status-text text-[#bbc2cf] text-xs truncate max-w-[190px]">Disconnected</span>
+        </div>
+        <button
+          type="button"
+          title="Reload Page"
+          aria-label="Reload Page"
+          class="btn-status-reload text-[#5B6268] hover:text-[#51afef] active:text-[#46D9FF] hover:scale-110 active:scale-95 transition flex items-center justify-center p-1 cursor-pointer rounded hover:bg-[#21242b]"
+        >
+          <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <div id="app-container" class="flex flex-col h-screen h-[100dvh] w-screen p-1.5 sm:p-3 relative">
+      <!-- Unified Terminal Window Frame -->
+      <div class="flex-1 min-h-0 flex flex-col bg-[#1b2229] border border-[#3f444a] rounded-xl overflow-hidden shadow-2xl shadow-black/50 relative">
+        <!-- Integrated Window Titlebar / Tab Strip -->
+        <header
+          id="top-titlebar"
+          class="flex items-center justify-between bg-[#21242b]/95 border-b border-[#3f444a]/80 px-2.5 sm:px-3 py-1.5 select-none flex-shrink-0 backdrop-blur-md"
+        >
+          <!-- Left: Hamburger Menu & Active Session Tab Capsule with Live Status Dot -->
+          <div class="flex items-center gap-2">
+            <button
+              id="btn-open-drawer"
+              type="button"
+              aria-label="Open sessions menu"
+              title="Sessions & Menu"
+              class="flex items-center justify-center w-7 h-7 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] hover:border-[#51afef]/60 text-[#bbc2cf] hover:text-[#51afef] transition shadow-xs cursor-pointer touch-manipulation focus:outline-none focus:ring-1 focus:ring-[#51afef]"
+            >
+              <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+
+            <!-- Active Session Tab Capsule -->
+            <button
+              id="header-session-badge"
+              type="button"
+              title="Click to switch sessions"
+              class="group flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef]/60 text-xs text-[#DFDFDF] transition shadow-xs cursor-pointer max-w-[190px] sm:max-w-[320px]"
+            >
+              <span id="header-status-dot" class="dot connected status-dot flex-shrink-0"></span>
+              <span id="current-session-label" class="font-bold tracking-tight truncate">session</span>
+              <svg class="w-3.5 h-3.5 text-[#5B6268] group-hover:text-[#51afef] transition flex-shrink-0 ml-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Right: Reload & Action Controls -->
+          <div class="flex items-center gap-1.5">
+            <button
+              id="btn-status-reload"
+              type="button"
+              title="Reload Terminal & Page"
+              aria-label="Reload Page"
+              class="btn-status-reload flex items-center justify-center w-7 h-7 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] hover:border-[#51afef]/60 text-[#5B6268] hover:text-[#51afef] transition shadow-xs cursor-pointer touch-manipulation"
+            >
+              <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Terminal Container -->
+        <main
+          id="terminal-container"
+          class="flex-1 min-h-0 bg-[#1b2229] relative overflow-hidden"
+        >
+          <div id="terminal" class="w-full h-full"></div>
 
         <!-- Empty Session State Overlay -->
         <div

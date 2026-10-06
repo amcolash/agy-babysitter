@@ -1,10 +1,5 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice } from './terminal.js';
 
-const statusDot = document.getElementById('status-dot');
-const statusText = document.getElementById('status-text');
-const statusBox = document.getElementById('connection-status-box');
-const btnStatusReload = document.getElementById('btn-status-reload');
-
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
 const disconnectTitle = document.getElementById('disconnect-title');
@@ -19,12 +14,13 @@ let isServerUpdating = false;
 let isPollingForOnline = false;
 const RECONNECT_DELAY_MS = 2500;
 
-if (btnStatusReload) {
-  btnStatusReload.addEventListener('click', (e) => {
+// Attach click listeners to all reload buttons
+document.querySelectorAll('.btn-status-reload, #btn-status-reload').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
     e.stopPropagation();
     window.location.reload();
   });
-}
+});
 
 if (btnReloadPage) {
   btnReloadPage.addEventListener('click', (e) => {
@@ -67,17 +63,20 @@ export function hideDisconnectedOverlay() {
 }
 
 export function updateStatus(state, message) {
-  if (statusDot) statusDot.className = `dot ${state}`;
-  if (statusText) statusText.textContent = message;
-  if (statusBox) statusBox.title = message;
+  const dots = document.querySelectorAll('.status-dot');
+  dots.forEach((dot) => {
+    dot.className = `dot ${state} status-dot`;
+  });
 
-  if (btnStatusReload) {
-    if (state === 'connected') {
-      btnStatusReload.classList.add('hidden');
-    } else {
-      btnStatusReload.classList.remove('hidden');
-    }
-  }
+  const texts = document.querySelectorAll('.status-text');
+  texts.forEach((text) => {
+    text.textContent = message;
+  });
+
+  const boxes = document.querySelectorAll('.connection-status-box');
+  boxes.forEach((box) => {
+    box.title = message;
+  });
 }
 
 export function getCurrentSession() {
@@ -186,7 +185,9 @@ export function connectTerminal(sessionName) {
   currentSession = sessionName;
   updateStatus('connecting', `Connecting (${sessionName})...`);
 
-  fitAddon.fit();
+  try {
+    fitAddon.fit();
+  } catch (e) {}
   const cols = term.cols || 80;
   const rows = term.rows || 24;
 

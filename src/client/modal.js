@@ -228,9 +228,15 @@ export async function initInfo() {
 export function initModal() {
   loadRecentSessions();
 
-  btnOpenModal.addEventListener('click', openModal);
-  btnCloseModal.addEventListener('click', closeModal);
-  btnCancelModal.addEventListener('click', closeModal);
+  if (btnOpenModal) {
+    btnOpenModal.addEventListener('click', openModal);
+  }
+  if (btnCloseModal) {
+    btnCloseModal.addEventListener('click', closeModal);
+  }
+  if (btnCancelModal) {
+    btnCancelModal.addEventListener('click', closeModal);
+  }
 
   modalOverlay.addEventListener('click', (e) => {
     if (e.target === modalOverlay) closeModal();

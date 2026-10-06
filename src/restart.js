@@ -13,9 +13,22 @@ const serverScript = fs.existsSync(distServerScript) ? distServerScript : srcSer
 
 // If running under systemd, use systemctl
 try {
-  const isSystemdActive = execSync('systemctl --user is-active agy-babysitter.service 2>/dev/null', { encoding: 'utf8' }).trim() === 'active';
-  if (isSystemdActive) {
+  let isSystemd = false;
+  try {
+    const active = execSync('systemctl --user is-active agy-babysitter.service', { encoding: 'utf8', stdio: 'pipe' }).trim();
+    if (active === 'active') isSystemd = true;
+  } catch (e) {}
+
+  try {
+    const enabled = execSync('systemctl --user is-enabled agy-babysitter.service', { encoding: 'utf8', stdio: 'pipe' }).trim();
+    if (enabled === 'enabled') isSystemd = true;
+  } catch (e) {}
+
+  if (isSystemd) {
     console.log('Restarting agy-babysitter systemd user service...');
+    try {
+      execSync('fuser -k 8080/tcp 2>/dev/null || true', { stdio: 'ignore' });
+    } catch (e) {}
     execSync('systemctl --user restart agy-babysitter.service', { stdio: 'inherit' });
     console.log('agy-babysitter restarted successfully via systemd.');
     process.exit(0);

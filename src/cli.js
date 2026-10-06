@@ -42,6 +42,7 @@ if (args.length > 0 && args[0] && !args[0].startsWith('-')) {
 
 const targetCwd = resolveTilde(config.DEFAULT_CWD);
 const targetCommand = config.DEFAULT_COMMAND || 'agy';
+const wrappedCommand = `export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1 CLICOLOR=1 CLICOLOR_FORCE=1; exec ${targetCommand}`;
 
 if (!fs.existsSync(targetCwd)) {
   fs.mkdirSync(targetCwd, { recursive: true });
@@ -49,7 +50,7 @@ if (!fs.existsSync(targetCwd)) {
 
 ensureServerRunning();
 
-const zellijArgs = ['attach', '-c', sessionName, '--', 'bash', '-c', targetCommand];
+const zellijArgs = ['attach', '-c', sessionName, '--', 'bash', '-c', wrappedCommand];
 const zellij = spawn('zellij', zellijArgs, {
   cwd: targetCwd,
   stdio: 'inherit'

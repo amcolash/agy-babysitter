@@ -31,8 +31,8 @@ export const term = new Terminal({
     selectionForeground: "#DFDFDF",
     selectionBackground: "#3f444a",
     // 16 ANSI Colors matching Doom One
-    black: "#1b2229",
-    brightBlack: "#3f444a",
+    black: "#282c34",
+    brightBlack: "#5b6268",
     red: "#ff6c6b",
     brightRed: "#ff6655",
     green: "#98be65",
@@ -46,7 +46,7 @@ export const term = new Terminal({
     cyan: "#46D9FF",
     brightCyan: "#46D9FF",
     white: "#DFDFDF",
-    brightWhite: "#bbc2cf",
+    brightWhite: "#ffffff",
   },
   allowProposedApi: true,
   scrollback: 50000,
@@ -191,6 +191,11 @@ export function initTerminal(onInput, onResize) {
     (e) => {
       if (e.touches.length === 0) {
         if (!hasMovedTouch && isMobileDevice()) {
+          // If tap occurred on a button or UI control inside terminalContainer, do not open input modal
+          if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state')) {
+            initialPinchDistance = null;
+            return;
+          }
           // Clean tap on terminal screen on mobile -> open popup
           openInputModal();
         }
@@ -240,7 +245,10 @@ export function initTerminal(onInput, onResize) {
   }
 
   // Ensure terminal receives focus on desktop, or opens input popup on mobile
-  terminalContainer.addEventListener("click", () => {
+  terminalContainer.addEventListener("click", (e) => {
+    if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state')) {
+      return;
+    }
     if (isMobileDevice()) {
       openInputModal();
     } else {
@@ -321,20 +329,25 @@ export function stripPromptPrefix(rawLine) {
   if (!rawLine) return '';
   const text = rawLine.trim();
 
+  // If the line is only a prompt symbol or prompt indicator, it has no user input yet
+  if (/^([>›❯●▶»?$\#:]|>{1,3}|\.\.\.)$/.test(text)) {
+    return '';
+  }
+
   // Standard shell prompts like "user@host:~/path$ command" or "user@host:~# command"
-  const shellPromptRegex = /^.*?[@:][^$#%❯›>]*?[\$#%❯›>]\s+/;
+  const shellPromptRegex = /^.*?[@:][^$#%❯›>]*?[\$#%❯›>]\s*/;
   if (shellPromptRegex.test(text)) {
     return text.replace(shellPromptRegex, '');
   }
 
-  // Single symbol prompts like "> ", "› ", "❯ ", "● ", "▶ ", "» ", "? ", "$ ", "# "
-  const symbolPromptRegex = /^([>›❯●▶»?$\#]|>{2,3}|\.\.\.)\s+/;
+  // Symbol prompts like "> ", ">", "› ", "❯ ", "● ", "▶ ", "» ", "? ", "$ ", "# "
+  const symbolPromptRegex = /^([>›❯●▶»?$\#]|>{1,3}|\.\.\.)\s*/;
   if (symbolPromptRegex.test(text)) {
     return text.replace(symbolPromptRegex, '');
   }
 
   // Named prompts like "agy> ", "input> ", "search: "
-  const namedPromptRegex = /^[a-zA-Z0-9_\-\.]+([>:\?])\s+/;
+  const namedPromptRegex = /^[a-zA-Z0-9_\-\.]+([>:\?])\s*/;
   if (namedPromptRegex.test(text)) {
     return text.replace(namedPromptRegex, '');
   }
@@ -351,7 +364,7 @@ export function getCurrentTerminalInput() {
     // 1. Check if user currently has highlighted/selected text in terminal
     const selection = term.getSelection()?.trim();
     if (selection) {
-      return selection;
+      return stripPromptPrefix(selection);
     }
 
     const buffer = term.buffer.active;
@@ -398,7 +411,7 @@ export function getCurrentTerminalInput() {
       }
     }
 
-    return fullText.trim();
+    return '';
   } catch (e) {
     console.warn('Failed to extract terminal input:', e);
     return '';
