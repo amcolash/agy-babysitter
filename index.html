@@ -83,7 +83,7 @@
       <!-- Terminal Container -->
       <main
         id="terminal-container"
-        class="flex-1 min-h-0 bg-[#1b2229] border border-[#3f444a] focus-within:border-[#51afef]/70 rounded-lg overflow-hidden p-1 relative shadow-inner"
+        class="flex-1 min-h-0 bg-[#1b2229] border border-[#3f444a] focus-within:border-[#51afef]/70 rounded-lg overflow-hidden p-1 relative"
       >
         <div id="terminal" class="w-full h-full"></div>
 
@@ -228,24 +228,6 @@
             <div class="flex items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
-                id="btn-input-history-prev"
-                title="Previous command in history"
-                class="text-[#bbc2cf] hover:text-[#51afef] px-2 py-1 rounded bg-[#1b2229] border border-[#3f444a] text-xs font-bold transition disabled:opacity-30 cursor-pointer"
-                aria-label="Previous history"
-              >
-                ▲
-              </button>
-              <button
-                type="button"
-                id="btn-input-history-next"
-                title="Next command in history"
-                class="text-[#bbc2cf] hover:text-[#51afef] px-2 py-1 rounded bg-[#1b2229] border border-[#3f444a] text-xs font-bold transition disabled:opacity-30 cursor-pointer"
-                aria-label="Next history"
-              >
-                ▼
-              </button>
-              <button
-                type="button"
                 id="btn-input-clear-text"
                 title="Clear text"
                 class="text-[#5B6268] hover:text-[#ff6c6b] px-2 py-1 rounded hover:bg-[#282c34] text-xs transition cursor-pointer"
@@ -275,71 +257,28 @@
               spellcheck="true"
               autocomplete="on"
             ></textarea>
-            <div class="flex items-center justify-between text-[11px] text-[#5B6268] px-1">
-              <span>Press <kbd class="px-1 py-0.5 rounded bg-[#282c34] border border-[#3f444a] text-[#bbc2cf] font-mono">Shift+Enter</kbd> for newline</span>
-              <span id="input-char-count">0 chars</span>
-            </div>
-          </div>
-
-          <!-- Helper Key Chips -->
-          <div class="flex items-center gap-1.5 overflow-x-auto py-1">
-            <button
-              type="button"
-              id="btn-chip-esc"
-              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#ff6c6b] hover:text-[#ff6c6b] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
-            >
-              ESC
-            </button>
-            <button
-              type="button"
-              id="btn-chip-ctrl-c"
-              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#ff6c6b] hover:text-[#ff6c6b] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
-            >
-              Ctrl+C
-            </button>
-            <button
-              type="button"
-              id="btn-chip-tab"
-              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef] hover:text-[#51afef] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
-            >
-              TAB
-            </button>
-            <button
-              type="button"
-              id="btn-chip-up"
-              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef] hover:text-[#51afef] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
-            >
-              ▲ Up
-            </button>
-            <button
-              type="button"
-              id="btn-chip-down"
-              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef] hover:text-[#51afef] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
-            >
-              ▼ Down
-            </button>
           </div>
 
           <!-- Actions & Send Options -->
-          <div class="flex items-center justify-between pt-2 border-t border-[#3f444a] gap-2 flex-wrap sm:flex-nowrap">
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5 text-xs text-[#bbc2cf] cursor-pointer select-none" title="Send Enter (↵) after input">
+          <div class="flex items-center justify-between pt-2 border-t border-[#3f444a] gap-3 flex-wrap sm:flex-nowrap">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <label class="flex items-center gap-2 text-xs text-[#bbc2cf] hover:text-[#DFDFDF] cursor-pointer select-none" title="Send Enter (↵) to execute the command immediately">
                 <input
                   type="checkbox"
                   id="input-send-enter-checkbox"
                   checked
                   class="rounded bg-[#1b2229] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
                 />
-                <span>Enter (↵)</span>
+                <span>Send Enter (↵) to execute</span>
               </label>
 
-              <label class="flex items-center gap-1.5 text-xs text-[#bbc2cf] cursor-pointer select-none" title="Clear current uncommitted line on terminal before sending (Ctrl+U)">
+              <label class="flex items-center gap-2 text-xs text-[#bbc2cf] hover:text-[#DFDFDF] cursor-pointer select-none" title="Clear current uncommitted terminal prompt (Ctrl+U) before typing edited version">
                 <input
                   type="checkbox"
                   id="input-replace-line-checkbox"
                   class="rounded bg-[#1b2229] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
                 />
-                <span>Replace Line</span>
+                <span>Replace active terminal prompt</span>
               </label>
             </div>
 

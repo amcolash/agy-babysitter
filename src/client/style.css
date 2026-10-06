@@ -173,23 +173,35 @@ html, body {
 #terminal-container {
   min-height: 0;
   touch-action: none;
+  background-color: var(--color-doom-bg-dark, #1b2229);
 }
 
 #terminal {
   width: 100%;
   height: 100%;
   touch-action: none;
+  background-color: #1b2229;
 }
 
 .xterm {
-  padding: 6px;
+  padding: 4px;
   height: 100%;
   touch-action: none;
+  background-color: #1b2229;
 }
 
 .xterm .xterm-viewport {
+  background-color: #1b2229 !important;
   overflow-y: auto;
   touch-action: none;
+}
+
+.xterm .xterm-screen {
+  background-color: #1b2229;
+}
+
+.xterm-rows {
+  background-color: #1b2229;
 }
 
 /* Modal Overlay Transitions */
