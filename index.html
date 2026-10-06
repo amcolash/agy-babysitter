@@ -377,6 +377,15 @@
           </div>
 
           <form id="create-session-form" class="flex-1 overflow-y-auto pr-1 space-y-3.5">
+            <!-- Recent Sessions Quick Pick -->
+            <div id="recent-sessions-container" class="hidden flex flex-col gap-1.5 pb-2.5 border-b border-[#3f444a]">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Recent Sessions</label>
+                <span class="text-[11px] text-[#5B6268]">Click to quick-fill</span>
+              </div>
+              <div id="recent-sessions-list" class="flex flex-wrap gap-2 pt-0.5"></div>
+            </div>
+
             <!-- Session Name -->
             <div class="form-group flex flex-col gap-1.5">
               <label for="new-session-name" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Session Name</label>

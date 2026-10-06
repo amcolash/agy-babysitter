@@ -2,23 +2,11 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import config, { resolveTilde } from '../config.js';
+import config, { resolveTilde, formatDisplayPath } from '../config.js';
 
 const router = express.Router();
 
-/**
- * Format paths with ~ for user home
- * @param {string} fullPath
- * @returns {string}
- */
-export function formatDisplayPath(fullPath) {
-  const home = os.homedir();
-  if (fullPath === home) return '~';
-  if (fullPath.startsWith(home + '/')) {
-    return '~' + fullPath.slice(home.length);
-  }
-  return fullPath;
-}
+export { formatDisplayPath };
 
 /**
  * Validate that a target CWD is a direct 1-level child of an allowed root

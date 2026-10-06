@@ -4,12 +4,24 @@ import config, { resolveTilde } from '../config.js';
 import { listSessions, createSession, killSession, getUniqueSessionName } from '../zellij.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { touchWakelock, getWakelockStatus } from '../wakelock.js';
+import { getRecentSessions } from '../recentSessions.js';
 
 const router = express.Router();
 
 // API: Get wakelock status
 router.get('/wakelock', (req, res) => {
   res.json(getWakelockStatus());
+});
+
+// API: Get recent sessions history
+router.get('/sessions/recent', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const recent = getRecentSessions(limit);
+    res.json({ recent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // API: List active zellij sessions

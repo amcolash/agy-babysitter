@@ -47,6 +47,16 @@ export function resolveTilde(p) {
   return path.resolve(trimmed);
 }
 
+export function formatDisplayPath(fullPath) {
+  if (!fullPath) return '';
+  const home = os.homedir();
+  if (fullPath === home) return '~';
+  if (fullPath.startsWith(home + '/')) {
+    return '~' + fullPath.slice(home.length);
+  }
+  return fullPath;
+}
+
 function parseAllowedDirectories(raw) {
   if (!raw) {
     return [

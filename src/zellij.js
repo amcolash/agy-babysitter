@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import config, { resolveTilde } from './config.js';
+import { addRecentSession } from './recentSessions.js';
 
 const execFileAsync = util.promisify(execFile);
 export const sessionMeta = new Map();
@@ -102,6 +103,14 @@ export async function listSessions() {
       const meta = sessionMeta.get(sessionName) || {};
       const sessionPath = meta.cwd || inferCwdFromSessionName(sessionName);
 
+      if (sessionPath && fs.existsSync(sessionPath)) {
+        addRecentSession({
+          name: sessionName,
+          cwd: sessionPath,
+          command: meta.command || config.DEFAULT_COMMAND
+        });
+      }
+
       sessions.push({
         name: sessionName,
         created: new Date().toISOString(),
@@ -177,6 +186,7 @@ export async function createSession({ name, command, cwd }) {
 
   sessionMeta.set(sessionName, { cwd: sessionCwd, command: sessionCommand });
   saveMetaCache();
+  addRecentSession({ name: sessionName, cwd: sessionCwd, command: sessionCommand });
   return { name: sessionName, created: true, message: 'Session created successfully' };
 }
 
