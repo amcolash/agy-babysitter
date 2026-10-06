@@ -140,3 +140,19 @@ export function setupAssetWatcher(wss, targetDir) {
     console.warn('[Auto-Refresh] Failed to watch directory for changes:', err.message);
   }
 }
+
+/**
+ * Broadcasts an upgrade/restarting notification to all connected clients
+ * @param {WebSocketServer} wss 
+ * @param {string} [message] 
+ */
+export function broadcastServerRestart(wss, message = 'Server is restarting with updates...') {
+  const payload = JSON.stringify({ type: 'restarting', message });
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(payload);
+      } catch (e) {}
+    }
+  }
+}

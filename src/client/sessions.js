@@ -114,8 +114,7 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
       }
     }
   } catch (err) {
-    console.error('Failed to load sessions:', err);
-    showToast(`Failed to load sessions: ${err.message}`, 'error');
+    console.warn('Failed to load sessions (server may be restarting):', err.message);
   }
 }
 
