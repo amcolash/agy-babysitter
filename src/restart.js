@@ -26,6 +26,7 @@ try {
 
   if (isSystemd) {
     console.log('Restarting agy-babysitter systemd user service...');
+    stopAllWakelocks();
     try {
       execSync('fuser -k 8080/tcp 2>/dev/null || true', { stdio: 'ignore' });
     } catch (e) {}

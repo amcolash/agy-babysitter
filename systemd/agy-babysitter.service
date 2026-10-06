@@ -8,6 +8,8 @@ WorkingDirectory=%h/Github/agy-babysitter
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/env node dist/server/server.js
 KillMode=process
+ExecStopPost=-/usr/bin/pkill -9 -f "systemd-inhibit.*agy-babysitter"
+ExecStopPost=-/usr/bin/pkill -9 -f "sleep infinity"
 Restart=on-failure
 RestartSec=5
 

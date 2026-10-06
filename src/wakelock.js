@@ -12,6 +12,9 @@ let lastTouch = 0;
  * Spawns the OS-specific sleep/idle inhibitor process
  */
 function spawnWakelockProcess() {
+  // Always clean up any existing duplicate or orphan wakelocks first
+  stopAllWakelocks();
+
   const platform = os.platform();
   let cmd = null;
   let args = [];
@@ -29,7 +32,7 @@ function spawnWakelockProcess() {
   }
 
   try {
-    const proc = spawn(cmd, args, { stdio: 'ignore' });
+    const proc = spawn(cmd, args, { stdio: 'ignore', detached: true });
     proc.on('error', (err) => {
       console.warn(`[Wakelock] Failed to run ${cmd}:`, err.message);
       wakelockProcess = null;
@@ -69,8 +72,14 @@ export function releaseWakelock() {
   if (wakelockProcess) {
     console.log('[Wakelock] Released (inactivity timeout reached)');
     try {
-      wakelockProcess.kill('SIGTERM');
-    } catch (e) {}
+      if (wakelockProcess.pid) {
+        process.kill(-wakelockProcess.pid, 'SIGKILL');
+      }
+    } catch (e) {
+      try {
+        wakelockProcess.kill('SIGKILL');
+      } catch (e2) {}
+    }
     wakelockProcess = null;
   }
 }
@@ -79,12 +88,49 @@ export function releaseWakelock() {
  * Stops and kills all active wakelock processes system-wide
  */
 export function stopAllWakelocks() {
-  releaseWakelock();
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = null;
+  }
+  if (wakelockProcess) {
+    try {
+      if (wakelockProcess.pid) {
+        process.kill(-wakelockProcess.pid, 'SIGKILL');
+      }
+    } catch (e) {
+      try {
+        wakelockProcess.kill('SIGKILL');
+      } catch (e2) {}
+    }
+    wakelockProcess = null;
+  }
+
+  // Terminate any systemd-inhibit processes created by agy-babysitter and their children
   try {
-    execSync("pkill -f 'systemd-inhibit.*agy-babysitter'", { stdio: 'ignore' });
+    const stdout = execSync("pgrep -f 'systemd-inhibit.*agy-babysitter' 2>/dev/null || true", {
+      encoding: 'utf8'
+    }).trim();
+    if (stdout) {
+      const pids = stdout.split(/\s+/).filter(Boolean);
+      for (const pid of pids) {
+        try {
+          execSync(`pkill -9 -P ${pid} 2>/dev/null || true`, { stdio: 'ignore' });
+          process.kill(parseInt(pid, 10), 'SIGKILL');
+        } catch (e) {}
+      }
+    }
   } catch (e) {}
+
   try {
-    execSync("pkill -f 'caffeinate -d -i -m -u'", { stdio: 'ignore' });
+    execSync("pkill -9 -f 'systemd-inhibit.*agy-babysitter' 2>/dev/null || true", { stdio: 'ignore' });
+  } catch (e) {}
+
+  try {
+    execSync("pkill -9 -f 'sleep infinity' 2>/dev/null || true", { stdio: 'ignore' });
+  } catch (e) {}
+
+  try {
+    execSync("pkill -9 -f 'caffeinate -d -i -m -u' 2>/dev/null || true", { stdio: 'ignore' });
   } catch (e) {}
 }
 
@@ -129,22 +175,28 @@ export function getWakelockStatus() {
   };
 }
 
-// Cleanup on process termination
+// Cleanup on process termination and crash handlers
 function cleanupOnExit() {
-  if (wakelockProcess) {
-    try {
-      wakelockProcess.kill('SIGTERM');
-    } catch (e) {}
-    wakelockProcess = null;
-  }
+  stopAllWakelocks();
 }
 
 process.on('exit', cleanupOnExit);
-process.on('SIGINT', () => {
-  cleanupOnExit();
-  process.exit(0);
+
+['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGQUIT', 'SIGABRT'].forEach((sig) => {
+  process.on(sig, () => {
+    cleanupOnExit();
+    process.exit(0);
+  });
 });
-process.on('SIGTERM', () => {
+
+process.on('uncaughtException', (err) => {
+  console.error('[Server Crash] Uncaught Exception:', err);
   cleanupOnExit();
-  process.exit(0);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server Crash] Unhandled Rejection:', reason);
+  cleanupOnExit();
+  process.exit(1);
 });

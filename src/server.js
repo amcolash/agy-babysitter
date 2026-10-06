@@ -7,7 +7,10 @@ import config from './config.js';
 import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
-import { touchWakelock } from './wakelock.js';
+import { touchWakelock, stopAllWakelocks } from './wakelock.js';
+
+// Clean up any stale or duplicate wakelocks from previous runs
+stopAllWakelocks();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +84,7 @@ function handleGracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`[Server] Received ${signal}, notifying connected clients of update...`);
+  stopAllWakelocks();
   broadcastServerRestart(wss);
   setTimeout(() => {
     server.close(() => {
