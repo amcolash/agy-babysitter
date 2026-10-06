@@ -102,7 +102,10 @@ function applyRecentSession(session) {
   newSessionNameInput.focus();
 }
 
+let modalOpenedAt = 0;
+
 export function openModal() {
+  modalOpenedAt = Date.now();
   modalOverlay.classList.remove('hidden');
   pickerSearchInput.value = '';
   loadSessions();
@@ -239,7 +242,7 @@ export function initModal() {
   }
 
   modalOverlay.addEventListener('click', (e) => {
-    if (e.target === modalOverlay) closeModal();
+    if (e.target === modalOverlay && Date.now() - modalOpenedAt > 350) closeModal();
   });
 
   window.addEventListener('keydown', (e) => {

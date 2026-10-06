@@ -6,9 +6,6 @@ import { openInputModal } from "./inputModal.js";
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
 
-const savedFontSize = parseInt(localStorage.getItem("agy_terminal_font_size"), 10);
-const initialFontSize = savedFontSize >= 8 && savedFontSize <= 36 ? savedFontSize : 14;
-
 export function isMobileDevice() {
   return (
     typeof window !== "undefined" &&
@@ -16,6 +13,23 @@ export function isMobileDevice() {
       (window.innerWidth <= 1024 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)))
   );
 }
+
+export function getSavedTerminalFontSize() {
+  const isMobile = isMobileDevice();
+  const key = isMobile ? "agy_terminal_mobile_font_size" : "agy_terminal_desktop_font_size";
+  const saved = parseInt(localStorage.getItem(key) || localStorage.getItem("agy_terminal_font_size"), 10);
+  const defaultSize = isMobile ? 13 : 14;
+  return saved >= 8 && saved <= 36 ? saved : defaultSize;
+}
+
+export function saveTerminalFontSize(size) {
+  const isMobile = isMobileDevice();
+  const key = isMobile ? "agy_terminal_mobile_font_size" : "agy_terminal_desktop_font_size";
+  localStorage.setItem(key, String(size));
+  localStorage.setItem("agy_terminal_font_size", String(size));
+}
+
+const initialFontSize = getSavedTerminalFontSize();
 
 export const term = new Terminal({
   cursorBlink: true,
@@ -138,7 +152,7 @@ export function initTerminal(onInput, onResize) {
     "touchmove",
     (e) => {
       // Two-finger Pinch to Zoom / Font Resize on mobile
-      if (e.touches.length === 2 && initialPinchDistance) {
+      if (e.touches.length === 2 && initialPinchDistance && isMobileDevice()) {
         e.preventDefault();
         const currentDistance = getPinchDistance(e.touches);
         if (currentDistance && initialPinchDistance > 0) {
@@ -146,7 +160,7 @@ export function initTerminal(onInput, onResize) {
           const newFontSize = Math.min(32, Math.max(8, Math.round(initialPinchFontSize * ratio)));
           if (newFontSize !== term.options.fontSize) {
             term.options.fontSize = newFontSize;
-            localStorage.setItem("agy_terminal_font_size", String(newFontSize));
+            saveTerminalFontSize(newFontSize);
             handleTerminalResize();
           }
         }
@@ -189,17 +203,19 @@ export function initTerminal(onInput, onResize) {
       if (e.touches.length === 0) {
         if (!hasMovedTouch && isMobileDevice()) {
           // If tap occurred on a button or UI control inside terminalContainer, do not open input modal
-          if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state')) {
+          if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state, #input-popup-overlay, #modal-overlay')) {
             initialPinchDistance = null;
             return;
           }
-          // Clean tap on terminal screen on mobile -> open popup
+          if (e.cancelable) {
+            e.preventDefault();
+          }
           openInputModal();
         }
         initialPinchDistance = null;
       }
     },
-    { passive: true },
+    { passive: false },
   );
 
   const appContainer = document.getElementById("app-container");
@@ -234,20 +250,25 @@ export function initTerminal(onInput, onResize) {
     setTimeout(updateAppViewportHeight, 300);
   });
 
-  // Re-fit when fonts finish downloading
+  // Re-measure and re-fit when web fonts finish downloading
   if (document.fonts?.ready) {
     document.fonts.ready.then(() => {
-      setTimeout(handleTerminalResize, 50);
+      setTimeout(() => {
+        handleTerminalResize();
+        if (term.rows) {
+          term.refresh(0, term.rows - 1);
+        }
+      }, 30);
     });
   }
 
   // Ensure terminal receives focus on desktop, or opens input popup on mobile
   terminalContainer.addEventListener("click", (e) => {
-    if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state')) {
+    if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state, #input-popup-overlay, #modal-overlay')) {
       return;
     }
     if (isMobileDevice()) {
-      openInputModal();
+      // Handled cleanly via touchend
     } else {
       term.focus();
     }
@@ -276,6 +297,10 @@ export function initTerminal(onInput, onResize) {
 
 export function handleTerminalResize() {
   try {
+    // Invalidate cached char measurements on xterm's internal charSizeService if present
+    if (term._core?._charSizeService?.measure) {
+      term._core._charSizeService.measure();
+    }
     fitAddon.fit();
     term.scrollToBottom();
     if (onResizeCallback && term.cols && term.rows) {

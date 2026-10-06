@@ -11,6 +11,7 @@ const btnClose = document.getElementById('btn-close-input-popup');
 const btnClear = document.getElementById('btn-input-clear-text');
 
 let isOpen = false;
+let openedAt = 0;
 
 export function isInputModalOpen() {
   return isOpen;
@@ -19,6 +20,7 @@ export function isInputModalOpen() {
 export function openInputModal(initialText = '') {
   if (!inputPopupOverlay || !textarea) return;
   isOpen = true;
+  openedAt = Date.now();
 
   let textToSet = initialText;
   let hasGrabbedFromTerminal = false;
@@ -144,10 +146,10 @@ export function initInputModal() {
     });
   }
 
-  // Dismiss on clicking overlay backdrop
+  // Dismiss on clicking overlay backdrop (ignore clicks within 350ms of opening to prevent ghost clicks on mobile)
   if (inputPopupOverlay) {
     inputPopupOverlay.addEventListener('click', (e) => {
-      if (e.target === inputPopupOverlay) {
+      if (e.target === inputPopupOverlay && Date.now() - openedAt > 350) {
         closeInputModal();
       }
     });

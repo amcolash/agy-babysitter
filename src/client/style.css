@@ -7,7 +7,7 @@
   src: url('/fonts/SauceCodeProNerdFont-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
@@ -15,7 +15,7 @@
   src: url('/fonts/SauceCodeProNerdFont-Medium.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
@@ -23,7 +23,7 @@
   src: url('/fonts/SauceCodeProNerdFont-SemiBold.ttf') format('truetype');
   font-weight: 600;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
@@ -31,7 +31,7 @@
   src: url('/fonts/SauceCodeProNerdFont-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
@@ -39,7 +39,7 @@
   src: url('/fonts/SauceCodeProNerdFontMono-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
@@ -47,7 +47,7 @@
   src: url('/fonts/SauceCodeProNerdFontMono-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 /* Doom One Theme Design Tokens */
