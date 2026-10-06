@@ -62,10 +62,21 @@
         <div
           id="connection-status-box"
           title="Disconnected"
-          class="connection-status flex items-center sm:gap-2 bg-[#1b2229] border border-[#3f444a] p-2 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0 cursor-default"
+          class="connection-status flex items-center gap-1.5 sm:gap-2 bg-[#1b2229] border border-[#3f444a] px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium ml-auto sm:ml-0 flex-shrink-0 cursor-default"
         >
           <span id="status-dot" class="dot disconnected"></span>
           <span id="status-text" class="hidden sm:inline text-[#bbc2cf] text-xs max-w-[160px] sm:max-w-none truncate">Disconnected</span>
+          <button
+            id="btn-status-reload"
+            type="button"
+            title="Reload Page"
+            aria-label="Reload Page"
+            class="text-[#5B6268] hover:text-[#51afef] active:text-[#46D9FF] hover:scale-110 active:scale-95 transition flex items-center justify-center p-0.5 cursor-pointer ml-0.5"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -98,6 +109,41 @@
             + Create Session
           </button>
         </div>
+
+        <!-- Server Disconnected / Updating State Overlay -->
+        <div
+          id="server-disconnected-state"
+          class="hidden absolute inset-0 bg-[#1b2229]/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-35 select-none transition-all duration-300"
+        >
+          <div
+            id="disconnect-icon-box"
+            class="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#51afef] shadow-xl shadow-black/50 transition-all duration-300"
+          >
+            <svg id="disconnect-icon-spin" class="w-7 h-7 md:w-8 md:h-8 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+          <h3 id="disconnect-title" class="text-base md:text-lg font-bold text-[#DFDFDF] mb-1.5">Connecting to Server...</h3>
+          <p id="disconnect-subtitle" class="text-xs md:text-sm text-[#5B6268] max-w-sm mb-5 leading-relaxed">
+            Reconnecting to agy-babysitter automatically...
+          </p>
+          <div class="flex items-center gap-3">
+            <button
+              id="btn-retry-connection"
+              type="button"
+              class="px-4 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
+            >
+              Retry Now
+            </button>
+            <button
+              id="btn-reload-page"
+              type="button"
+              class="px-4 py-2 rounded-lg bg-[#282c34] hover:bg-[#21242b] border border-[#3f444a] text-[#bbc2cf] hover:text-[#DFDFDF] text-xs font-bold transition duration-150 cursor-pointer"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
       </main>
 
       <!-- Toast Container -->
@@ -105,8 +151,17 @@
 
       <!-- Floating Action Button (FAB) Speed Dial -->
       <div id="fab-container" class="fixed bottom-8 right-8 z-40 flex flex-col items-center">
-        <!-- Speed dial sub-buttons: ESC, Up, Down, Enter (opened above keyboard FAB) -->
+        <!-- Speed dial sub-buttons: Input, ESC, Up, Down, Enter (opened above keyboard FAB) -->
         <div id="fab-menu" class="hidden flex flex-col items-center gap-2.5 mb-2.5 transition-all duration-200 ease-out origin-bottom">
+          <button
+            id="btn-fab-input"
+            title="Open Text Input Area (autocorrect friendly)"
+            class="w-11 h-11 rounded-full bg-[#21242b] border border-[#3f444a] hover:border-[#51afef] hover:bg-[#51afef]/20 text-[#51afef] flex items-center justify-center font-bold text-base shadow-xl shadow-black/60 transition duration-150 active:scale-90 cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
           <button
             id="btn-fab-esc"
             title="Send Escape (Esc)"
@@ -140,7 +195,7 @@
         <!-- Main FAB Button with Keyboard Icon -->
         <button
           id="btn-fab"
-          title="Toggle navigation keyboard controls (Esc, Up, Down, Enter)"
+          title="Toggle navigation keyboard controls (Esc, Up, Down, Enter, Text Input)"
           class="w-12 h-12 rounded-full bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] flex items-center justify-center shadow-xl shadow-black/60 border border-[#51afef]/60 transition duration-200 active:scale-95 cursor-pointer"
           aria-label="Toggle keyboard menu"
         >
@@ -153,6 +208,148 @@
             />
           </svg>
         </button>
+      </div>
+
+      <!-- Terminal Input Popup Modal (Mobile & Touch Friendly) -->
+      <div
+        id="input-popup-overlay"
+        class="input-popup-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      >
+        <div
+          class="input-popup bg-[#21242b] border border-[#3f444a] rounded-t-2xl sm:rounded-xl p-4 sm:p-5 w-full max-w-lg shadow-2xl shadow-black/80 flex flex-col gap-3"
+        >
+          <!-- Header -->
+          <div class="flex items-center justify-between pb-2 border-b border-[#3f444a]">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#51afef] shadow-sm shadow-[#51afef]"></span>
+              <h3 class="font-bold text-[#DFDFDF] text-sm md:text-base">Terminal Input</h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="btn-input-history-prev"
+                title="Previous command in history"
+                class="text-[#bbc2cf] hover:text-[#51afef] px-2 py-1 rounded bg-[#1b2229] border border-[#3f444a] text-xs font-bold transition disabled:opacity-30 cursor-pointer"
+                aria-label="Previous history"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                id="btn-input-history-next"
+                title="Next command in history"
+                class="text-[#bbc2cf] hover:text-[#51afef] px-2 py-1 rounded bg-[#1b2229] border border-[#3f444a] text-xs font-bold transition disabled:opacity-30 cursor-pointer"
+                aria-label="Next history"
+              >
+                ▼
+              </button>
+              <button
+                type="button"
+                id="btn-input-clear-text"
+                title="Clear text"
+                class="text-[#5B6268] hover:text-[#ff6c6b] px-2 py-1 rounded hover:bg-[#282c34] text-xs transition cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                id="btn-close-input-popup"
+                class="text-[#5B6268] hover:text-[#DFDFDF] text-xl leading-none px-2 py-0.5 rounded hover:bg-[#282c34] transition cursor-pointer ml-1"
+                aria-label="Close input popup"
+              >
+                &times;
+              </button>
+            </div>
+          </div>
+
+          <!-- Textarea Input Area -->
+          <div class="flex flex-col gap-1.5">
+            <textarea
+              id="terminal-input-textarea"
+              rows="3"
+              placeholder="Type terminal input, prompt, or command..."
+              class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded-lg p-3 text-sm outline-none transition font-mono resize-none leading-relaxed"
+              autocorrect="on"
+              autocapitalize="sentences"
+              spellcheck="true"
+              autocomplete="on"
+            ></textarea>
+            <div class="flex items-center justify-between text-[11px] text-[#5B6268] px-1">
+              <span>Press <kbd class="px-1 py-0.5 rounded bg-[#282c34] border border-[#3f444a] text-[#bbc2cf] font-mono">Shift+Enter</kbd> for newline</span>
+              <span id="input-char-count">0 chars</span>
+            </div>
+          </div>
+
+          <!-- Helper Key Chips -->
+          <div class="flex items-center gap-1.5 overflow-x-auto py-1">
+            <button
+              type="button"
+              id="btn-chip-esc"
+              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#ff6c6b] hover:text-[#ff6c6b] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
+            >
+              ESC
+            </button>
+            <button
+              type="button"
+              id="btn-chip-ctrl-c"
+              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#ff6c6b] hover:text-[#ff6c6b] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
+            >
+              Ctrl+C
+            </button>
+            <button
+              type="button"
+              id="btn-chip-tab"
+              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef] hover:text-[#51afef] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
+            >
+              TAB
+            </button>
+            <button
+              type="button"
+              id="btn-chip-up"
+              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef] hover:text-[#51afef] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
+            >
+              ▲ Up
+            </button>
+            <button
+              type="button"
+              id="btn-chip-down"
+              class="px-2.5 py-1 rounded bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef] hover:text-[#51afef] text-[#bbc2cf] text-xs font-mono font-bold transition flex-shrink-0 cursor-pointer active:scale-95"
+            >
+              ▼ Down
+            </button>
+          </div>
+
+          <!-- Actions & Send Options -->
+          <div class="flex items-center justify-between pt-2 border-t border-[#3f444a] gap-2">
+            <label class="flex items-center gap-2 text-xs text-[#bbc2cf] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                id="input-send-enter-checkbox"
+                checked
+                class="rounded bg-[#1b2229] border-[#3f444a] text-[#51afef] focus:ring-[#51afef] focus:ring-offset-0 cursor-pointer"
+              />
+              <span>Append Enter (↵)</span>
+            </label>
+
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="btn-cancel-input-popup"
+                class="px-3 py-1.5 rounded-md bg-[#282c34] hover:bg-[#1b2229] text-[#bbc2cf] text-xs md:text-sm font-medium border border-[#3f444a] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="btn-send-input-popup"
+                class="px-4 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Send</span>
+                <span class="text-xs">↵</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Create Session Modal -->

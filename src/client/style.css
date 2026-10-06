@@ -193,15 +193,24 @@ html, body {
 }
 
 /* Modal Overlay Transitions */
-.modal-overlay {
+.modal-overlay,
+.input-popup-overlay {
   transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
-.modal-overlay.hidden {
+.modal-overlay.hidden,
+.input-popup-overlay.hidden {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   display: none;
+}
+
+/* Mobile bottom sheet safe area padding for input popup */
+@media (max-width: 640px) {
+  .input-popup {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
 }
 
 /* Folder Picker Dynamic Styling */

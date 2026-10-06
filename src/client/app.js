@@ -2,6 +2,7 @@ import { initTerminal } from './terminal.js';
 import { sendInput, sendResize } from './socket.js';
 import { initSessions, loadSessions } from './sessions.js';
 import { initModal, initInfo } from './modal.js';
+import { initInputModal } from './inputModal.js';
 import { initActions } from './actions.js';
 
 import { registerSW } from 'virtual:pwa-register';
@@ -10,6 +11,7 @@ import { registerSW } from 'virtual:pwa-register';
 initTerminal(sendInput, sendResize);
 initSessions();
 initModal();
+initInputModal();
 initActions();
 
 // Auto-updating PWA service worker

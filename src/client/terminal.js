@@ -1,12 +1,21 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { openInputModal } from "./inputModal.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
 
 const savedFontSize = parseInt(localStorage.getItem("agy_terminal_font_size"), 10);
 const initialFontSize = savedFontSize >= 8 && savedFontSize <= 36 ? savedFontSize : 14;
+
+export function isMobileDevice() {
+  return (
+    typeof window !== "undefined" &&
+    (("ontouchstart" in window || navigator.maxTouchPoints > 0) &&
+      (window.innerWidth <= 1024 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)))
+  );
+}
 
 export const term = new Terminal({
   cursorBlink: true,
@@ -54,12 +63,17 @@ let onResizeCallback = null;
 export function configureHelperTextarea() {
   const helperTextarea = terminalEl.querySelector('.xterm-helper-textarea');
   if (helperTextarea) {
-    helperTextarea.setAttribute('autocorrect', 'off');
-    helperTextarea.setAttribute('autocapitalize', 'none');
-    helperTextarea.setAttribute('autocomplete', 'off');
-    helperTextarea.setAttribute('spellcheck', 'false');
-    helperTextarea.setAttribute('inputmode', 'search');
-    helperTextarea.setAttribute('enterkeyhint', 'enter');
+    if (isMobileDevice()) {
+      helperTextarea.setAttribute('inputmode', 'none');
+      helperTextarea.setAttribute('tabindex', '-1');
+    } else {
+      helperTextarea.setAttribute('autocorrect', 'off');
+      helperTextarea.setAttribute('autocapitalize', 'none');
+      helperTextarea.setAttribute('autocomplete', 'off');
+      helperTextarea.setAttribute('spellcheck', 'false');
+      helperTextarea.setAttribute('inputmode', 'search');
+      helperTextarea.setAttribute('enterkeyhint', 'enter');
+    }
     helperTextarea.setAttribute('data-gramm', 'false');
     helperTextarea.setAttribute('data-enable-grammarly', 'false');
   }
@@ -80,8 +94,11 @@ export function initTerminal(onInput, onResize) {
   terminalContainer.addEventListener("touchstart", configureHelperTextarea, { passive: true });
 
   // Mobile Touch Swipe Scrolling & Pinch-to-Zoom Support
+  let startTouchX = 0;
+  let startTouchY = 0;
   let lastTouchY = 0;
   let lastTouchX = 0;
+  let hasMovedTouch = false;
   let accumulatedTouchDelta = 0;
   const SWIPE_STEP_PX = 14;
 
@@ -99,11 +116,15 @@ export function initTerminal(onInput, onResize) {
     "touchstart",
     (e) => {
       if (e.touches.length === 1) {
-        lastTouchY = e.touches[0].clientY;
-        lastTouchX = e.touches[0].clientX;
+        startTouchX = e.touches[0].clientX;
+        startTouchY = e.touches[0].clientY;
+        lastTouchY = startTouchY;
+        lastTouchX = startTouchX;
+        hasMovedTouch = false;
         accumulatedTouchDelta = 0;
         initialPinchDistance = null;
       } else if (e.touches.length === 2) {
+        hasMovedTouch = true;
         initialPinchDistance = getPinchDistance(e.touches);
         initialPinchFontSize = term.options.fontSize || 14;
       }
@@ -132,6 +153,10 @@ export function initTerminal(onInput, onResize) {
 
       // Single finger swipe scrolling
       if (e.touches.length === 1) {
+        if (Math.hypot(e.touches[0].clientX - startTouchX, e.touches[0].clientY - startTouchY) > 8) {
+          hasMovedTouch = true;
+        }
+
         e.preventDefault();
         const currentY = e.touches[0].clientY;
         const currentX = e.touches[0].clientX;
@@ -164,7 +189,11 @@ export function initTerminal(onInput, onResize) {
   terminalContainer.addEventListener(
     "touchend",
     (e) => {
-      if (e.touches.length < 2) {
+      if (e.touches.length === 0) {
+        if (!hasMovedTouch && isMobileDevice()) {
+          // Clean tap on terminal screen on mobile -> open popup
+          openInputModal();
+        }
         initialPinchDistance = null;
       }
     },
@@ -210,9 +239,13 @@ export function initTerminal(onInput, onResize) {
     });
   }
 
-  // Ensure terminal receives focus and opens keyboard on click
+  // Ensure terminal receives focus on desktop, or opens input popup on mobile
   terminalContainer.addEventListener("click", () => {
-    term.focus();
+    if (isMobileDevice()) {
+      openInputModal();
+    } else {
+      term.focus();
+    }
   });
 
   // Automatic copy to clipboard when selecting text
@@ -254,7 +287,7 @@ export function writeTerminal(data) {
 
 export function clearTerminal() {
   term.clear();
-  term.focus();
+  if (!isMobileDevice()) term.focus();
 }
 
 export function getRecentTerminalLines(numLines = 25) {
