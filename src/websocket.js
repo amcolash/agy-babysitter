@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { attachToSession } from './ptyManager.js';
 import { touchWakelock } from './wakelock.js';
-import { markTurnStarted, clearNotification, getAllNotificationStates } from './sessionMonitor.js';
+import { markTurnStarted, clearNotification, getAllNotificationStates, feedSessionStream } from './sessionMonitor.js';
 
 /**
  * Sets up WebSocket server for terminal streaming and control actions
@@ -33,12 +33,15 @@ export function setupWebSocketServer(server) {
         rows
       });
 
-      // Stream PTY output to the browser WebSocket
+      // Stream PTY output to the browser WebSocket immediately
       ptyProcess.onData((data) => {
-        touchWakelock();
         if (!isClosed && ws.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
+        touchWakelock();
+        queueMicrotask(() => {
+          feedSessionStream(sessionName, data);
+        });
       });
 
       ptyProcess.onExit(({ exitCode, signal }) => {
@@ -69,7 +72,7 @@ export function setupWebSocketServer(server) {
 
     // Handle messages/actions coming from the browser
     ws.on('message', (message) => {
-      touchWakelock(true);
+      touchWakelock();
       if (!ptyProcess) return;
 
       const raw = message.toString();
@@ -97,7 +100,6 @@ export function setupWebSocketServer(server) {
             }
             return;
           } else if (payload.type === 'input') {
-            markTurnStarted(sessionName);
             ptyProcess.write(payload.data);
             return;
           } else if (payload.type === 'action') {
@@ -116,7 +118,6 @@ export function setupWebSocketServer(server) {
         }
       }
 
-      markTurnStarted(sessionName);
       ptyProcess.write(raw);
     });
 

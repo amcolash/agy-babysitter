@@ -1,7 +1,6 @@
 import { spawn, execSync } from 'child_process';
 import os from 'os';
 import config from './config.js';
-
 let wakelockProcess = null;
 let inactivityTimer = null;
 let lastActiveTimestamp = Date.now();
