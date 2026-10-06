@@ -1,6 +1,7 @@
 import { connectTerminal } from './socket.js';
 import { loadSessions, computeUniqueSessionName, getActiveSessions } from './sessions.js';
 import { showToast } from './toast.js';
+import { safeFetchJson } from './api.js';
 
 const modalOverlay = document.getElementById('modal-overlay');
 const btnOpenModal = document.getElementById('btn-open-modal');
@@ -38,9 +39,7 @@ export function setSelectedCwd(folderPath, displayName = null, baseFolderName = 
 export async function loadRecentSessions() {
   if (!recentSessionsContainer || !recentSessionsList) return;
   try {
-    const res = await fetch('/api/sessions/recent?limit=4');
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await safeFetchJson('/api/sessions/recent?limit=4');
     const recent = data.recent || [];
 
     if (recent.length === 0) {
@@ -119,9 +118,7 @@ export function closeModal() {
 export async function loadAllowedDirectories() {
   pickerFolderList.innerHTML = '<div class="picker-loading text-xs text-[#5B6268] p-3 text-center">Loading allowed directories...</div>';
   try {
-    const res = await fetch('/api/directories');
-    if (!res.ok) throw new Error('Failed to load directories');
-    const data = await res.json();
+    const data = await safeFetchJson('/api/directories');
     allowedRoots = data.roots || [];
 
     const allFolders = allowedRoots.flatMap((r) => r.folders || []);
@@ -220,12 +217,11 @@ function renderFolderList() {
 
 export async function initInfo() {
   try {
-    const res = await fetch('/api/info');
-    const info = await res.json();
+    const info = await safeFetchJson('/api/info');
     defaultCwd = info.defaultCwd || '';
     newSessionCommandInput.value = info.defaultCommand || 'agy';
   } catch (err) {
-    console.error('Failed to load info:', err);
+    // Graceful fallback when restarting or offline
   }
 }
 
@@ -262,18 +258,12 @@ export function initModal() {
     }
 
     try {
-      const res = await fetch('/api/sessions', {
+      const data = await safeFetchJson('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, cwd, command })
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to create session');
-      }
-
-      const data = await res.json();
       closeModal();
       loadRecentSessions();
       showToast(`Created session '${data.name || name}'`, 'success');

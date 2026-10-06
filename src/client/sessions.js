@@ -1,7 +1,8 @@
 import { writeTerminal } from './terminal.js';
-import { connectTerminal, disconnectTerminal, getCurrentSession, setCurrentSession, clearReconnectTimer } from './socket.js';
+import { connectTerminal, disconnectTerminal, getCurrentSession, setCurrentSession, clearReconnectTimer, hideDisconnectedOverlay } from './socket.js';
 import { showToast } from './toast.js';
 import { openModal } from './modal.js';
+import { safeFetchJson } from './api.js';
 
 const sessionSelect = document.getElementById('session-select');
 const btnKillSession = document.getElementById('btn-kill-session');
@@ -70,8 +71,7 @@ export function updateEmptyState(hasSessions) {
 
 export async function loadSessions(selectSessionName = null, autoConnect = true) {
   try {
-    const res = await fetch('/api/sessions');
-    const data = await res.json();
+    const data = await safeFetchJson('/api/sessions');
     activeSessionsList = data.sessions || [];
 
     sessionSelect.innerHTML = '';
@@ -114,7 +114,7 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
       }
     }
   } catch (err) {
-    console.warn('Failed to load sessions (server may be restarting):', err.message);
+    // safeFetchJson handled disconnected overlay and recovery polling
   }
 }
 

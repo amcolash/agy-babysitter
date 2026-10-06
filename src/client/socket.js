@@ -111,14 +111,15 @@ export function disconnectTerminal() {
   hideDisconnectedOverlay();
 }
 
-function startPollingServerOnline() {
+export function startPollingServerOnline() {
   if (isPollingForOnline) return;
   isPollingForOnline = true;
 
   const checkOnline = async () => {
     try {
       const res = await fetch('/api/sessions', { cache: 'no-store' });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         console.log('[Recovery] Server is back online, reloading page...');
         window.location.reload();
         return;
@@ -128,6 +129,22 @@ function startPollingServerOnline() {
   };
 
   setTimeout(checkOnline, 500);
+}
+
+// Window online / offline listeners
+if (typeof window !== 'undefined') {
+  window.addEventListener('offline', () => {
+    updateStatus('disconnected', 'Network offline');
+    showDisconnectedOverlay('Network Offline', 'Your device appears to be offline. Reconnecting once connection is restored...');
+  });
+
+  window.addEventListener('online', () => {
+    updateStatus('connecting', 'Network restored - connecting...');
+    showDisconnectedOverlay('Connecting to Server...', 'Network connection restored. Connecting to server...');
+    if (currentSession) {
+      connectTerminal(currentSession);
+    }
+  });
 }
 
 export function scheduleReconnect(sessionName) {
