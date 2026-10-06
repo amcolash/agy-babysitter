@@ -27,15 +27,15 @@
     <link rel="stylesheet" href="/src/client/style.css" />
   </head>
   <body class="h-full w-full bg-[#282c34] text-[#bbc2cf] font-mono antialiased overflow-hidden">
-    <!-- Slide-over Sessions Drawer -->
+    <!-- Slide-over Sessions Drawer (mobile only) -->
     <div
       id="drawer-backdrop"
-      class="fixed inset-0 bg-black/60 backdrop-blur-xs z-40"
+      class="md:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-40"
     ></div>
 
     <aside
       id="sessions-drawer"
-      class="fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] bg-[#21242b] border-r border-[#3f444a] rounded-r-2xl shadow-2xl z-50 flex flex-col justify-between overflow-hidden"
+      class="md:hidden fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] bg-[#21242b] border-r border-[#3f444a] rounded-r-2xl shadow-2xl z-50 flex flex-col justify-between overflow-hidden"
       aria-label="Sessions Menu"
     >
       <!-- Drawer Header -->
@@ -116,28 +116,16 @@
         <!-- Integrated Window Titlebar / Tab Strip -->
         <header
           id="top-titlebar"
-          class="flex items-center justify-between bg-[#21242b]/95 border-b border-[#3f444a]/80 px-2.5 sm:px-3 py-1.5 select-none flex-shrink-0 backdrop-blur-md"
+          class="flex items-stretch justify-between bg-[#21242b] border-b border-[#3f444a] px-2 md:px-0 py-1.5 md:py-0 select-none flex-shrink-0 backdrop-blur-md min-w-0 h-9"
         >
-          <!-- Left: Hamburger Menu & Active Session Tab Capsule with Live Status Dot -->
-          <div class="flex items-center gap-2">
-            <button
-              id="btn-open-drawer"
-              type="button"
-              aria-label="Open sessions menu"
-              title="Sessions & Menu"
-              class="flex items-center justify-center w-7 h-7 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#3f444a] border border-[#3f444a] hover:border-[#51afef]/60 text-[#bbc2cf] hover:text-[#51afef] transition shadow-xs cursor-pointer touch-manipulation focus:outline-none focus:ring-1 focus:ring-[#51afef]"
-            >
-              <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-
+          <!-- Mobile View: Active Session Tab Capsule (hidden on desktop) -->
+          <div class="flex md:hidden items-center gap-2 min-w-0 my-auto">
             <!-- Active Session Tab Capsule -->
             <button
               id="header-session-badge"
               type="button"
               title="Click to switch sessions"
-              class="group flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef]/60 text-xs text-[#DFDFDF] transition shadow-xs cursor-pointer max-w-[190px] sm:max-w-[320px]"
+              class="group flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef]/60 text-xs text-[#DFDFDF] transition shadow-xs cursor-pointer max-w-[200px] sm:max-w-[320px] min-w-0"
             >
               <span id="header-status-dot" class="dot connected status-dot flex-shrink-0"></span>
               <span id="current-session-label" class="font-bold tracking-tight truncate">session</span>
@@ -147,8 +135,33 @@
             </button>
           </div>
 
-          <!-- Right: Reload & Action Controls -->
-          <div class="flex items-center gap-1.5">
+          <!-- Desktop View: Connected Horizontal Tab Strip + Inline Plus Button (visible on md: and larger) -->
+          <div id="desktop-tabs-container" class="hidden md:flex items-stretch flex-1 min-w-0 overflow-hidden">
+            <!-- Tabs List Container (no margins between tabs, connected together) -->
+            <div id="desktop-tabs-list" class="flex items-stretch gap-0 overflow-x-auto min-w-0 no-scrollbar">
+              <!-- Rendered dynamically by sessions.js -->
+            </div>
+
+            <!-- New Session Button directly next to last tab -->
+            <button
+              id="btn-desktop-new-session"
+              type="button"
+              title="Create New Session"
+              aria-label="Create New Session"
+              class="flex items-center justify-center w-7 h-7 my-auto ml-1.5 rounded-md hover:bg-[#282c34] text-[#5B6268] hover:text-[#51afef] transition cursor-pointer flex-shrink-0 touch-manipulation"
+            >
+              <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Right: Status indicator & Reload Control -->
+          <div class="flex items-center gap-2 px-2.5 my-auto flex-shrink-0">
+            <div class="hidden md:flex items-center gap-1.5 text-[11px] text-[#5B6268] select-none">
+              <span class="dot connected status-dot"></span>
+              <span class="status-text truncate max-w-[120px]">Connected</span>
+            </div>
             <button
               id="btn-status-reload"
               type="button"

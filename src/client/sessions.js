@@ -15,6 +15,8 @@ const emptySessionState = document.getElementById('empty-session-state');
 const btnEmptyNewSession = document.getElementById('btn-empty-new-session');
 const headerSessionBadge = document.getElementById('header-session-badge');
 const currentSessionLabel = document.getElementById('current-session-label');
+const desktopTabsList = document.getElementById('desktop-tabs-list');
+const btnDesktopNewSession = document.getElementById('btn-desktop-new-session');
 
 let activeSessionsList = [];
 let isDrawerOpen = false;
@@ -74,6 +76,7 @@ export function clearSessionFromStorageAndUrl() {
 }
 
 export function openDrawer() {
+  if (window.innerWidth >= 768) return;
   if (!sessionsDrawer || !drawerBackdrop) return;
   isDrawerOpen = true;
   drawerBackdrop.classList.add('open');
@@ -99,6 +102,107 @@ export function updateEmptyState(hasSessions) {
       emptySessionState.classList.remove('hidden');
     }
   }
+}
+
+export async function terminateSession(sessionName) {
+  const confirmed = confirm(`Are you sure you want to terminate session '${sessionName}'?`);
+  if (!confirmed) return false;
+
+  try {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast(`Terminated session '${sessionName}'`, 'info');
+      const wasCurrent = getCurrentSession() === sessionName;
+      if (wasCurrent) {
+        writeTerminal(`\r\n\x1b[33m[Session '${sessionName}' terminated]\x1b[0m\r\n`);
+        disconnectTerminal();
+        clearSessionFromStorageAndUrl();
+      }
+      await loadSessions();
+      return true;
+    } else {
+      showToast(`Could not terminate session: ${data.error || 'Unknown error'}`, 'error');
+      return false;
+    }
+  } catch (err) {
+    showToast(`Failed to terminate session: ${err.message}`, 'error');
+    return false;
+  }
+}
+
+function renderDesktopTabs() {
+  if (!desktopTabsList) return;
+  desktopTabsList.innerHTML = '';
+
+  const current = getCurrentSession();
+
+  if (activeSessionsList.length === 0) {
+    desktopTabsList.innerHTML = `
+      <span class="text-xs text-[#5B6268] italic px-2">No active sessions</span>
+    `;
+    return;
+  }
+
+  activeSessionsList.forEach((session) => {
+    const isActive = session.name === current;
+    const tab = document.createElement('div');
+    tab.className = `session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] ${
+      isActive
+        ? 'bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 border-t-[#51afef] border-b-0'
+        : 'bg-[#21242b] text-[#5B6268] hover:text-[#DFDFDF] hover:bg-[#282c34] border-t-2 border-t-transparent border-b border-b-[#3f444a]'
+    }`;
+    tab.dataset.sessionName = session.name;
+    tab.title = `${session.name} (${session.cwd || session.path || 'default'})`;
+
+    tab.innerHTML = `
+      <span class="w-2 h-2 rounded-full flex-shrink-0 ${
+        isActive
+          ? 'bg-[#98be65] shadow-[0_0_6px_rgba(152,190,101,0.8)]'
+          : 'bg-[#5B6268]/50'
+      }"></span>
+      <span class="tracking-tight truncate ${isActive ? 'text-[#51afef]' : ''}">${session.name}</span>
+      <button
+        type="button"
+        title="Close session ${session.name}"
+        aria-label="Close session ${session.name}"
+        class="btn-tab-close p-0.5 rounded text-[#5B6268] hover:text-[#ff6c6b] hover:bg-[#ff6c6b]/15 active:bg-[#ff6c6b]/30 transition flex-shrink-0 cursor-pointer ml-1"
+      >
+        <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    `;
+
+    tab.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-tab-close')) return;
+      if (session.name !== getCurrentSession()) {
+        clearReconnectTimer();
+        syncSessionToStorageAndUrl(session.name);
+        connectTerminal(session.name);
+        renderSessions();
+      }
+    });
+
+    const btnClose = tab.querySelector('.btn-tab-close');
+    if (btnClose) {
+      btnClose.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await terminateSession(session.name);
+      });
+    }
+
+    desktopTabsList.appendChild(tab);
+
+    if (isActive) {
+      setTimeout(() => {
+        tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }, 0);
+    }
+  });
 }
 
 function renderDrawerSessions() {
@@ -159,6 +263,7 @@ function renderDrawerSessions() {
         clearReconnectTimer();
         syncSessionToStorageAndUrl(session.name);
         connectTerminal(session.name);
+        renderSessions();
       }
       closeDrawer();
     });
@@ -168,42 +273,17 @@ function renderDrawerSessions() {
     if (btnKill) {
       btnKill.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const confirmed = confirm(`Are you sure you want to terminate session '${session.name}'?`);
-        if (!confirmed) return;
-
-        try {
-          const res = await fetch(`/api/sessions/${encodeURIComponent(session.name)}`, {
-            method: 'DELETE'
-          });
-          const data = await res.json();
-
-          if (data.success) {
-            showToast(`Terminated session '${session.name}'`, 'info');
-            const wasCurrent = getCurrentSession() === session.name;
-            if (wasCurrent) {
-              writeTerminal(`\r\n\x1b[33m[Session '${session.name}' terminated]\x1b[0m\r\n`);
-              disconnectTerminal();
-              try {
-                localStorage.removeItem('agy_selected_session');
-                const url = new URL(window.location);
-                if (url.searchParams.get('session') === session.name) {
-                  url.searchParams.delete('session');
-                  window.history.replaceState(null, '', url);
-                }
-              } catch (e) {}
-            }
-            await loadSessions();
-          } else {
-            showToast(`Could not terminate session: ${data.error || 'Unknown error'}`, 'error');
-          }
-        } catch (err) {
-          showToast(`Failed to terminate session: ${err.message}`, 'error');
-        }
+        await terminateSession(session.name);
       });
     }
 
     drawerSessionsList.appendChild(item);
   });
+}
+
+export function renderSessions() {
+  renderDrawerSessions();
+  renderDesktopTabs();
 }
 
 export async function loadSessions(selectSessionName = null, autoConnect = true) {
@@ -222,7 +302,7 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
       clearSessionFromStorageAndUrl();
       disconnectTerminal();
       updateStatus('disconnected', 'No active sessions');
-      renderDrawerSessions();
+      renderSessions();
       return;
     }
 
@@ -260,7 +340,7 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
       }
     }
 
-    renderDrawerSessions();
+    renderSessions();
   } catch (err) {
     // safeFetchJson handled disconnected overlay and recovery polling
   }
@@ -280,6 +360,14 @@ export function initSessions() {
       e.preventDefault();
       e.stopPropagation();
       openDrawer();
+    });
+  }
+
+  if (btnDesktopNewSession) {
+    btnDesktopNewSession.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openModal();
     });
   }
 

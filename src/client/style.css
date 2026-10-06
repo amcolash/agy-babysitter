@@ -225,6 +225,13 @@ html, body {
   transform: translateX(0);
 }
 
+@media (min-width: 768px) {
+  #drawer-backdrop,
+  #sessions-drawer {
+    display: none !important;
+  }
+}
+
 /* Modal Overlay Transitions */
 .modal-overlay,
 .input-popup-overlay {
@@ -322,3 +329,13 @@ html, body {
   color: #5B6268;
   text-align: center;
 }
+
+/* Scrollbar Utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
