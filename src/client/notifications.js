@@ -1,4 +1,3 @@
-import { getLinesAbovePrompt } from './terminal.js';
 import { getCurrentSession, sendClearNotification } from './socket.js';
 
 let audioCtx = null;
@@ -229,159 +228,36 @@ function updatePageTitle() {
   const current = getCurrentSession();
   const currentNotif = current ? getSessionNotification(current) : null;
 
-  if (currentNotif === 'input') {
-    document.title = `🔔 [${current}] Input Needed | agy`;
-    return;
-  } else if (currentNotif === 'settled') {
-    document.title = `✨ [${current}] Done | agy`;
+  if (currentNotif) {
+    document.title = `🔔 [${current}] ${currentNotif === 'input' ? 'Input Needed' : 'Done'} | agy`;
     return;
   }
 
   // Check background sessions for any pending notifications
-  let bgInputCount = 0;
-  let bgSettledCount = 0;
+  let bgNotifCount = 0;
   for (const [name, s] of sessionStates.entries()) {
-    if (name !== current) {
-      if (s.notified === 'input') bgInputCount++;
-      else if (s.notified === 'settled') bgSettledCount++;
+    if (name !== current && s.notified) {
+      bgNotifCount++;
     }
   }
 
-  if (bgInputCount > 0) {
-    document.title = `🔔 (${bgInputCount}) Input Needed | agy`;
-  } else if (bgSettledCount > 0) {
-    document.title = `✨ (${bgSettledCount}) Done | agy`;
+  if (bgNotifCount > 0) {
+    document.title = `🔔 (${bgNotifCount}) Alert | agy`;
   } else {
     document.title = 'agy';
   }
 }
 
-function getAbovePromptText() {
-  const lines = getLinesAbovePrompt(20);
-  return (lines || []).join('\n').trim();
-}
-
-/**
- * Checks recent terminal lines strictly ABOVE the prompt to determine if agy is waiting for input or permission
- */
-function isTerminalWaitingForInput() {
-  const lines = getLinesAbovePrompt(15);
-  if (!lines || lines.length === 0) return false;
-
-  const tailLines = lines.slice(-6);
-  const tailText = tailLines.join('\n');
-
-  // Question prompts starting with ?
-  if (/\?\s+(Allow|Select|Choose|Do you|Run|Execute|Are you|Confirm|What|Which|Proceed)/i.test(tailText)) {
-    return true;
-  }
-
-  // Bracket confirmations [Y/n], [y/N], (y/n), (Y/N)
-  if (/(\[Y\/n\]|\[y\/N\]|\(y\/n\)|\(Y\/N\)|\[yes\/no\])/i.test(tailText)) {
-    return true;
-  }
-
-  // Choice selector lines starting with ❯ or › or ● with options
-  if (tailLines.some((l) => /^[❯›●\>\?]\s+/.test(l.trim()) && /(select|choose|arrow keys|option|allow|deny|approve)/i.test(tailText))) {
-    return true;
-  }
-
-  // Interactive menu indicators
-  if (/(press enter to continue|use arrow keys to navigate|select an option)/i.test(tailText)) {
-    return true;
-  }
-
-  // Tool execution permission prompts
-  if (/(allow\s+(tool|command|read|write|execution)|deny|do you want to proceed)/i.test(tailText)) {
-    return true;
-  }
-
-  return false;
-}
-
-let debounceCheckTimer = null;
-
 /**
  * Called on incoming terminal data
  */
 export function onTerminalDataReceived(data) {
-  if (isResizingActive()) return;
-
   const sessionName = getCurrentSession();
   if (!sessionName) return;
 
   // If ANSI bell character is encountered in data
   if (typeof data === 'string' && data.includes('\x07')) {
-    triggerInputNotification(sessionName);
-    return;
-  }
-
-  // Debounce check once stream slows down or pauses
-  if (debounceCheckTimer) {
-    clearTimeout(debounceCheckTimer);
-  }
-
-  debounceCheckTimer = setTimeout(() => {
-    debounceCheckTimer = null;
-    evaluateSessionSettlement(sessionName);
-  }, 1200);
-}
-
-function evaluateSessionSettlement(sessionName) {
-  if (isResizingActive()) return;
-
-  const state = getSessionState(sessionName);
-  const currentText = getAbovePromptText();
-
-  // If first time encountering this session buffer (e.g. initial connection), set baseline without ringing
-  if (state.lastSnapshot === null) {
-    state.lastSnapshot = currentText;
-    return;
-  }
-
-  // If content above prompt has NOT changed (e.g. user was typing in prompt box or cursor blinked), do nothing!
-  if (currentText === state.lastSnapshot) {
-    return;
-  }
-
-  // If the buffer was empty or undefined, do not notify
-  if (!currentText) {
-    return;
-  }
-
-  // New content arrived above prompt! Update snapshot baseline
-  state.lastSnapshot = currentText;
-
-  if (isTerminalWaitingForInput()) {
-    triggerInputNotification(sessionName);
-  } else if (state.notified === null) {
-    triggerSettledNotification(sessionName);
-  }
-}
-
-function triggerInputNotification(sessionName) {
-  const state = getSessionState(sessionName);
-  if (state.notified === 'input') return;
-
-  state.notified = 'input';
-  playInputBellSound();
-  updatePageTitle();
-
-  if (onNotificationChangeCallback) {
-    onNotificationChangeCallback(sessionName, 'input');
-  }
-}
-
-function triggerSettledNotification(sessionName) {
-  const state = getSessionState(sessionName);
-  if (state.notified !== null) return;
-
-  state.notified = 'settled';
-  playSettledSound();
-  updatePageTitle();
-
-  if (onNotificationChangeCallback) {
-    onNotificationChangeCallback(sessionName, 'settled');
+    handleServerSessionNotification(sessionName, 'input');
   }
 }
 
@@ -389,9 +265,9 @@ function triggerSettledNotification(sessionName) {
  * Initialize global interaction listeners to unlock audio, track resize, & clear notifications on user action
  */
 export function initNotifications() {
-  const interactionEvents = ['click', 'keydown', 'touchstart', 'mousedown'];
+  const interactionEvents = ['click', 'keydown', 'touchstart'];
   interactionEvents.forEach((ev) => {
-    window.addEventListener(ev, handleUserInteraction, { passive: true, capture: true });
+    window.addEventListener(ev, handleUserInteraction, { passive: true });
   });
 
   window.addEventListener('resize', onTerminalResized, { passive: true });

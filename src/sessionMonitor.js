@@ -24,6 +24,17 @@ async function dumpSessionScreen(sessionName) {
 }
 
 /**
+ * Checks if the terminal screen currently contains an active animated agy braille spinner (e.g. ⣷ Running command...)
+ * @param {string} dumpText
+ * @returns {boolean}
+ */
+export function hasAgyActiveSpinner(dumpText) {
+  if (!dumpText) return false;
+  const lines = dumpText.split('\n');
+  return lines.some((l) => /^[\u2800-\u28FF]\s+\S+/.test(l.trim()));
+}
+
+/**
  * Extract lines strictly above the active prompt box
  * @param {string} dumpText
  * @returns {string}
@@ -33,22 +44,25 @@ export function extractAbovePrompt(dumpText) {
   const lines = dumpText.split('\n');
   const isDivider = (line) => /^[─━\-_=]{5,}/.test(line.trim());
 
-  // Scan backwards from bottom to locate prompt divider lines
-  const dividerIndices = [];
-  for (let i = lines.length - 1; i >= 0; i--) {
+  // Find last non-empty line
+  let lastNonEmpty = lines.length - 1;
+  while (lastNonEmpty >= 0 && !lines[lastNonEmpty].trim()) {
+    lastNonEmpty--;
+  }
+  if (lastNonEmpty < 0) return '';
+
+  // Scan backwards from last non-empty line to find the top divider of the prompt box
+  const searchStart = lastNonEmpty;
+  const searchEnd = Math.max(0, lastNonEmpty - 15);
+  let topDividerIdx = -1;
+
+  for (let i = searchStart; i >= searchEnd; i--) {
     if (isDivider(lines[i])) {
-      dividerIndices.push(i);
-      if (dividerIndices.length >= 2) break;
+      topDividerIdx = i; // keep taking highest divider in the bottom cluster
     }
   }
 
-  let cutoff = lines.length;
-  if (dividerIndices.length >= 2) {
-    cutoff = dividerIndices[1];
-  } else if (dividerIndices.length === 1) {
-    cutoff = dividerIndices[0];
-  }
-
+  const cutoff = topDividerIdx !== -1 ? topDividerIdx : lastNonEmpty + 1;
   const start = Math.max(0, cutoff - 25);
   const contentLines = lines
     .slice(start, cutoff)
@@ -101,10 +115,8 @@ function getTracker(sessionName) {
   if (!sessionTrackers.has(sessionName)) {
     sessionTrackers.set(sessionName, {
       sessionName,
-      lastSnapshot: null,
-      currentContent: null,
-      lastChangedAt: 0,
-      settled: true,
+      isWorking: false,
+      spinnerDisappearedAt: 0,
       notified: null
     });
   }
@@ -146,36 +158,36 @@ async function pollSessions() {
       if (dump === null) continue;
 
       const tracker = getTracker(name);
-      const abovePrompt = extractAbovePrompt(dump);
+      const isCurrentlyWorking = hasAgyActiveSpinner(dump);
 
-      // Initial discovery - set baseline without triggering notification
-      if (tracker.lastSnapshot === null) {
-        tracker.lastSnapshot = abovePrompt;
-        tracker.currentContent = abovePrompt;
-        tracker.settled = true;
-        tracker.notified = null;
-        continue;
-      }
+      if (isCurrentlyWorking) {
+        // Agy is actively working/thinking/running with animated braille spinner
+        tracker.isWorking = true;
+        tracker.spinnerDisappearedAt = 0;
+      } else if (tracker.isWorking) {
+        // Spinner is not visible on this frame
+        const now = Date.now();
+        if (!tracker.spinnerDisappearedAt) {
+          tracker.spinnerDisappearedAt = now;
+        }
 
-      const now = Date.now();
-      if (abovePrompt !== tracker.currentContent) {
-        // Output is actively changing
-        tracker.currentContent = abovePrompt;
-        tracker.lastChangedAt = now;
-        tracker.settled = false;
-      } else if (!tracker.settled && now - tracker.lastChangedAt >= 1000) {
-        // Output stabilized!
-        tracker.settled = true;
+        const abovePrompt = extractAbovePrompt(dump);
+        const needsInput = isWaitingForInput(abovePrompt);
+        // If waiting for input/permission, 1000ms is sufficient since execution is paused.
+        // For turn completion, require 2500ms of sustained quiet to bridge intermediate tool transitions & LLM roundtrips.
+        const requiredQuietMs = needsInput ? 1000 : 2500;
 
-        if (abovePrompt && abovePrompt !== tracker.lastSnapshot) {
-          tracker.lastSnapshot = abovePrompt;
-          const needsInput = isWaitingForInput(abovePrompt);
+        if (now - tracker.spinnerDisappearedAt >= requiredQuietMs) {
+          // Sustained quiet state reached! Turn is finished.
+          tracker.isWorking = false;
+          tracker.spinnerDisappearedAt = 0;
+
           if (needsInput) {
             if (tracker.notified !== 'input') {
               tracker.notified = 'input';
               broadcastSessionNotification(name, 'input');
             }
-          } else if (tracker.notified === null) {
+          } else if (tracker.notified !== 'settled') {
             tracker.notified = 'settled';
             broadcastSessionNotification(name, 'settled');
           }
@@ -193,8 +205,7 @@ export function markTurnStarted(sessionName) {
   if (!sessionName) return;
   const tracker = getTracker(sessionName);
   tracker.notified = null;
-  tracker.settled = false;
-  tracker.lastChangedAt = Date.now();
+  // NOTE: do not set tracker.isWorking = true here; let hasAgyActiveSpinner detect when agy begins work!
 }
 
 export function clearNotification(sessionName) {
@@ -217,7 +228,7 @@ export function getAllNotificationStates() {
 export function initSessionMonitor(wss) {
   wssInstance = wss;
   if (monitorInterval) clearInterval(monitorInterval);
-  monitorInterval = setInterval(pollSessions, 800);
+  monitorInterval = setInterval(pollSessions, 300);
   pollSessions().catch(() => {});
 }
 
