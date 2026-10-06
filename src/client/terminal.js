@@ -318,7 +318,45 @@ export function getRecentTerminalLines(numLines = 25) {
 }
 
 /**
- * Strip shell or agy prompt prefixes from raw terminal line
+ * Checks if a string is a known CLI prompt placeholder, divider line, or tip
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isPlaceholderOrTip(text) {
+  if (!text) return true;
+  const t = text.trim();
+  if (!t) return true;
+
+  // Exact symbol / divider / whitespace only
+  if (/^([>›❯●▶»?$\#:]|>{1,3}|\.\.\.|[─━\-_=]+)$/.test(t)) {
+    return true;
+  }
+
+  // agy mode tips: "Accept-edits mode: ...", "Plan mode: ...", "Bypass mode: ...", "Auto mode: ...", "Default mode: ..."
+  if (/^(accept-edits|plan|bypass|auto|default)\s+mode\b/i.test(t)) {
+    return true;
+  }
+
+  // Common UI tips, keybinding hints, and help text in prompt placeholders
+  if (/\(shift\+tab/i.test(t)) {
+    return true;
+  }
+  if (/file edits (auto-approved|require approval)/i.test(t)) {
+    return true;
+  }
+  if (/^(type (a|your) (prompt|message)|ask anything|press enter to|enter a command|shift\+enter for)/i.test(t)) {
+    return true;
+  }
+  if (/^(\/ to search skills|\? for help|\/ for commands|esc to dismiss|\(tab to (auto-)?complete\))/i.test(t)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Strip shell or agy prompt prefixes from raw terminal line.
+ * If the line does not contain an actual prompt prefix, returns '' (never returns random output).
  * @param {string} rawLine
  * @returns {string}
  */
@@ -326,30 +364,36 @@ export function stripPromptPrefix(rawLine) {
   if (!rawLine) return '';
   const text = rawLine.trim();
 
-  // If the line is only a prompt symbol or prompt indicator, it has no user input yet
-  if (/^([>›❯●▶»?$\#:]|>{1,3}|\.\.\.)$/.test(text)) {
+  if (isPlaceholderOrTip(text)) {
     return '';
   }
 
   // Standard shell prompts like "user@host:~/path$ command" or "user@host:~# command"
-  const shellPromptRegex = /^.*?[@:][^$#%❯›>]*?[\$#%❯›>]\s*/;
-  if (shellPromptRegex.test(text)) {
-    return text.replace(shellPromptRegex, '');
+  const shellPromptRegex = /^.*?[@:][^$#%❯›>]*?[\$#%❯›>]\s*(.*)$/;
+  const shellMatch = text.match(shellPromptRegex);
+  if (shellMatch && typeof shellMatch[1] === 'string') {
+    const stripped = shellMatch[1].trim();
+    return isPlaceholderOrTip(stripped) ? '' : stripped;
   }
 
-  // Symbol prompts like "> ", ">", "› ", "❯ ", "● ", "▶ ", "» ", "? ", "$ ", "# "
-  const symbolPromptRegex = /^([>›❯●▶»?$\#]|>{1,3}|\.\.\.)\s*/;
-  if (symbolPromptRegex.test(text)) {
-    return text.replace(symbolPromptRegex, '');
+  // Symbol prompts like "> input", "› input", "❯ input", "● input", "$ input", "# input"
+  const symbolPromptRegex = /^([>›❯●▶»?$\#]|>{1,3}|\.\.\.)\s+(.*)$/;
+  const symbolMatch = text.match(symbolPromptRegex);
+  if (symbolMatch && typeof symbolMatch[2] === 'string') {
+    const stripped = symbolMatch[2].trim();
+    return isPlaceholderOrTip(stripped) ? '' : stripped;
   }
 
-  // Named prompts like "agy> ", "input> ", "search: "
-  const namedPromptRegex = /^[a-zA-Z0-9_\-\.]+([>:\?])\s*/;
-  if (namedPromptRegex.test(text)) {
-    return text.replace(namedPromptRegex, '');
+  // Named prompts like "agy> input", "input> input", "search: input"
+  const namedPromptRegex = /^[a-zA-Z0-9_\-\.]+([>:\?])\s+(.*)$/;
+  const namedMatch = text.match(namedPromptRegex);
+  if (namedMatch && typeof namedMatch[2] === 'string') {
+    const stripped = namedMatch[2].trim();
+    return isPlaceholderOrTip(stripped) ? '' : stripped;
   }
 
-  return text;
+  // Line has no prompt prefix -> not an input prompt line
+  return '';
 }
 
 /**
@@ -361,13 +405,68 @@ export function getCurrentTerminalInput() {
     // 1. Check if user currently has highlighted/selected text in terminal
     const selection = term.getSelection()?.trim();
     if (selection) {
-      return stripPromptPrefix(selection);
+      if (!isPlaceholderOrTip(selection)) {
+        const strippedSelection = stripPromptPrefix(selection);
+        return strippedSelection || selection;
+      }
+      return '';
     }
 
     const buffer = term.buffer.active;
     const currentAbsoluteY = buffer.baseY + buffer.cursorY;
+    const totalLines = buffer.length;
 
-    // First, inspect the logical line at cursor (including any wrapped lines)
+    // Helper: is a line a horizontal divider box line (e.g. ────────────────)
+    const isDividerLine = (line) => {
+      if (!line) return false;
+      const str = line.translateToString(true).trim();
+      return /^[─━\-_=]{5,}/.test(str);
+    };
+
+    // 2. Pattern A: Check for agy prompt enclosed between top and bottom divider lines (───)
+    let bottomDividerY = -1;
+    let topDividerY = -1;
+
+    // Scan backwards from the end of the buffer to find the active prompt box
+    const searchStartY = Math.min(totalLines - 1, currentAbsoluteY + 6);
+    const searchEndY = Math.max(0, currentAbsoluteY - 14);
+
+    for (let y = searchStartY; y >= searchEndY; y--) {
+      const line = buffer.getLine(y);
+      if (isDividerLine(line)) {
+        if (bottomDividerY === -1) {
+          bottomDividerY = y;
+        } else {
+          topDividerY = y;
+          break;
+        }
+      }
+    }
+
+    // If an agy divider box is detected
+    if (topDividerY !== -1 && bottomDividerY !== -1 && bottomDividerY > topDividerY && (bottomDividerY - topDividerY) <= 10) {
+      const promptLines = [];
+      for (let y = topDividerY + 1; y < bottomDividerY; y++) {
+        const line = buffer.getLine(y);
+        if (!line) continue;
+        const raw = line.translateToString(true).trim();
+        if (!raw) continue;
+        // Strip leading prompt indicator > or › or ❯
+        const stripped = raw.replace(/^[>›❯●▶»]\s*/, '');
+        if (stripped) {
+          promptLines.push(stripped);
+        }
+      }
+
+      const combined = promptLines.join('\n').trim();
+      if (combined && !isPlaceholderOrTip(combined)) {
+        return combined;
+      }
+      // agy box was found on screen, so user is in agy: if box is empty or tip, return ''
+      return '';
+    }
+
+    // 3. Pattern B: Standard shell prompt at cursor
     let startY = currentAbsoluteY;
     while (startY > 0) {
       const line = buffer.getLine(startY);
@@ -376,7 +475,6 @@ export function getCurrentTerminalInput() {
     }
 
     let endY = currentAbsoluteY;
-    const totalLines = buffer.length;
     while (endY < totalLines - 1) {
       const nextLine = buffer.getLine(endY + 1);
       if (!nextLine || !nextLine.isWrapped) break;
@@ -392,20 +490,8 @@ export function getCurrentTerminalInput() {
     }
 
     const stripped = stripPromptPrefix(fullText);
-    if (stripped) {
+    if (stripped && !isPlaceholderOrTip(stripped)) {
       return stripped;
-    }
-
-    // If empty at cursor, search recent lines above cursor for active prompt
-    for (let y = currentAbsoluteY; y >= Math.max(0, currentAbsoluteY - 6); y--) {
-      const line = buffer.getLine(y);
-      if (line) {
-        const raw = line.translateToString(true);
-        const parsed = stripPromptPrefix(raw);
-        if (parsed && parsed !== raw) {
-          return parsed;
-        }
-      }
     }
 
     return '';
