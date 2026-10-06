@@ -9,8 +9,6 @@ const btnStatusReload = document.getElementById('btn-status-reload');
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
 const disconnectTitle = document.getElementById('disconnect-title');
 const disconnectSubtitle = document.getElementById('disconnect-subtitle');
-const disconnectIconBox = document.getElementById('disconnect-icon-box');
-const disconnectIconSpin = document.getElementById('disconnect-icon-spin');
 const btnRetryConnection = document.getElementById('btn-retry-connection');
 const btnReloadPage = document.getElementById('btn-reload-page');
 
@@ -53,21 +51,11 @@ export function isServerUpdatingState() {
   return isServerUpdating;
 }
 
-export function showDisconnectedOverlay(title, subtitle, mode = 'disconnected') {
+export function showDisconnectedOverlay(title, subtitle) {
   if (!disconnectedOverlay) return;
 
   if (disconnectTitle && title) disconnectTitle.textContent = title;
   if (disconnectSubtitle && subtitle) disconnectSubtitle.textContent = subtitle;
-
-  if (disconnectIconBox) {
-    if (mode === 'updating') {
-      disconnectIconBox.className =
-        'w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#21242b] border border-[#51afef]/50 flex items-center justify-center mb-4 text-[#51afef] shadow-xl shadow-[#51afef]/10 transition-all duration-300';
-    } else {
-      disconnectIconBox.className =
-        'w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#ECBE7B] shadow-xl shadow-black/50 transition-all duration-300';
-    }
-  }
 
   disconnectedOverlay.classList.remove('hidden');
 }
@@ -149,13 +137,13 @@ export function scheduleReconnect(sessionName) {
 
   if (isServerUpdating) {
     updateStatus('connecting', 'Server updating - reconnecting...');
-    showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...', 'updating');
+    showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...');
     startPollingServerOnline();
     return;
   }
 
   updateStatus('disconnected', `Disconnected (${targetSession}) - reconnecting in 2s...`);
-  showDisconnectedOverlay('Connecting to Server...', 'Looks like you are disconnected from the server. Attempting to reconnect...', 'disconnected');
+  showDisconnectedOverlay('Connecting to Server...', 'Looks like you are disconnected from the server. Attempting to reconnect...');
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
@@ -220,7 +208,7 @@ export function connectTerminal(sessionName) {
         } else if (payload.type === 'restarting') {
           console.log('[Server Notice] Server is updating, entering upgrade state...');
           isServerUpdating = true;
-          showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...', 'updating');
+          showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...');
           startPollingServerOnline();
           return;
         }
