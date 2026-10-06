@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { attachToSession } from './ptyManager.js';
 import { touchWakelock } from './wakelock.js';
+import { markTurnStarted, clearNotification, getAllNotificationStates } from './sessionMonitor.js';
 
 /**
  * Sets up WebSocket server for terminal streaming and control actions
@@ -58,6 +59,14 @@ export function setupWebSocketServer(server) {
 
     ws.sessionName = sessionName;
 
+    // Send initial notification states across all sessions to newly connected client
+    try {
+      const initialStates = getAllNotificationStates();
+      if (initialStates && Object.keys(initialStates).length > 0) {
+        ws.send(JSON.stringify({ type: 'session_notifications_sync', states: initialStates }));
+      }
+    } catch (e) {}
+
     // Handle messages/actions coming from the browser
     ws.on('message', (message) => {
       touchWakelock(true);
@@ -88,13 +97,18 @@ export function setupWebSocketServer(server) {
             }
             return;
           } else if (payload.type === 'input') {
+            markTurnStarted(sessionName);
             ptyProcess.write(payload.data);
             return;
           } else if (payload.type === 'action') {
+            markTurnStarted(sessionName);
             if (payload.action === 'approve') ptyProcess.write('y\n');
             else if (payload.action === 'deny') ptyProcess.write('n\n');
             else if (payload.action === 'interrupt') ptyProcess.write('\x03');
             else if (payload.action === 'enter') ptyProcess.write('\r');
+            return;
+          } else if (payload.type === 'clear_notification') {
+            clearNotification(payload.session || sessionName);
             return;
           }
         } catch (e) {
@@ -102,6 +116,7 @@ export function setupWebSocketServer(server) {
         }
       }
 
+      markTurnStarted(sessionName);
       ptyProcess.write(raw);
     });
 

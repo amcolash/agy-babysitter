@@ -1,5 +1,5 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice } from './terminal.js';
-import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized } from './notifications.js';
+import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized, handleServerSessionNotification, handleServerSessionNotificationsSync } from './notifications.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -254,6 +254,12 @@ export function connectTerminal(sessionName) {
         } else if (payload.type === 'session_resized') {
           onTerminalResized();
           return;
+        } else if (payload.type === 'session_notification') {
+          handleServerSessionNotification(payload.session, payload.state);
+          return;
+        } else if (payload.type === 'session_notifications_sync') {
+          handleServerSessionNotificationsSync(payload.states);
+          return;
         }
       } catch (e) {}
     }
@@ -271,6 +277,12 @@ export function connectTerminal(sessionName) {
     if (ws !== socket) return;
     scheduleReconnect(sessionName);
   };
+}
+
+export function sendClearNotification(sessionName) {
+  if (ws && ws.readyState === WebSocket.OPEN && sessionName) {
+    ws.send(JSON.stringify({ type: 'clear_notification', session: sessionName }));
+  }
 }
 
 export function sendInput(data) {

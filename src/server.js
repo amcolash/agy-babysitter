@@ -8,6 +8,7 @@ import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
 import { touchWakelock, stopAllWakelocks } from './wakelock.js';
+import { initSessionMonitor, stopSessionMonitor } from './sessionMonitor.js';
 
 // Clean up any stale or duplicate wakelocks from previous runs
 stopAllWakelocks();
@@ -67,9 +68,10 @@ app.get('{*path}', (req, res, next) => {
   }
 });
 
-// WebSocket & Live-reload Asset Watcher
+// WebSocket, Live-reload Asset Watcher, and Session Background Monitor
 const wss = setupWebSocketServer(server);
 setupAssetWatcher(wss, clientDir);
+initSessionMonitor(wss);
 
 server.listen(config.PORT, config.HOST, () => {
   touchWakelock();
@@ -84,6 +86,7 @@ function handleGracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`[Server] Received ${signal}, notifying connected clients of update...`);
+  stopSessionMonitor();
   stopAllWakelocks();
   broadcastServerRestart(wss);
   setTimeout(() => {

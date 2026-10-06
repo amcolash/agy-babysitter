@@ -1,5 +1,5 @@
 import { getLinesAbovePrompt } from './terminal.js';
-import { getCurrentSession } from './socket.js';
+import { getCurrentSession, sendClearNotification } from './socket.js';
 
 let audioCtx = null;
 let audioUnlocked = false;
@@ -171,6 +171,33 @@ export function clearSessionNotification(sessionName) {
     if (onNotificationChangeCallback) {
       onNotificationChangeCallback(sessionName, null);
     }
+    sendClearNotification(sessionName);
+  }
+}
+
+export function handleServerSessionNotification(sessionName, state) {
+  if (!sessionName) return;
+  const s = getSessionState(sessionName);
+  const prevState = s.notified;
+  s.notified = state;
+  updatePageTitle();
+  if (onNotificationChangeCallback) {
+    onNotificationChangeCallback(sessionName, state);
+  }
+  if (state && state !== prevState) {
+    playNotificationSound();
+  }
+}
+
+export function handleServerSessionNotificationsSync(states) {
+  if (!states) return;
+  for (const [name, state] of Object.entries(states)) {
+    const s = getSessionState(name);
+    s.notified = state;
+  }
+  updatePageTitle();
+  if (onNotificationChangeCallback) {
+    onNotificationChangeCallback(null, null);
   }
 }
 
@@ -204,8 +231,26 @@ function updatePageTitle() {
 
   if (currentNotif === 'input') {
     document.title = `🔔 [${current}] Input Needed | agy`;
+    return;
   } else if (currentNotif === 'settled') {
     document.title = `✨ [${current}] Done | agy`;
+    return;
+  }
+
+  // Check background sessions for any pending notifications
+  let bgInputCount = 0;
+  let bgSettledCount = 0;
+  for (const [name, s] of sessionStates.entries()) {
+    if (name !== current) {
+      if (s.notified === 'input') bgInputCount++;
+      else if (s.notified === 'settled') bgSettledCount++;
+    }
+  }
+
+  if (bgInputCount > 0) {
+    document.title = `🔔 (${bgInputCount}) Input Needed | agy`;
+  } else if (bgSettledCount > 0) {
+    document.title = `✨ (${bgSettledCount}) Done | agy`;
   } else {
     document.title = 'agy';
   }
