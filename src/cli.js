@@ -1,15 +1,43 @@
 #!/usr/bin/env node
 
+import { spawn, execSync } from 'child_process';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import readline from 'readline';
-import { execSync, spawn } from 'child_process';
-import config, { resolveTilde } from './config.js';
-import { listSessions, hasSession, createSession, terminateSession, sanitizeSessionName, applyTmuxGlobalOptions } from './tmuxManager.js';
+import { fileURLToPath } from 'url';
+import config, { resolveTilde, formatDisplayPath } from './config.js';
+import {
+  listSessions,
+  createSession,
+  hasSession,
+  sanitizeSessionName,
+  applyTmuxGlobalOptions
+} from './tmuxManager.js';
 
 // Ensure normal interactive scheduling for the CLI process
 try {
   execSync(`chrt -o -p 0 ${process.pid} 2>/dev/null || true`);
 } catch (e) {}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+const distServerScript = path.join(rootDir, 'dist', 'server', 'server.js');
+const srcServerScript = path.join(__dirname, 'server.js');
+const serverScript = fs.existsSync(distServerScript) ? distServerScript : srcServerScript;
+
+function isServerRunning() {
+  try {
+    const stdout = execSync('pgrep -f "node.*server.js"', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
+    return Boolean(stdout.trim());
+  } catch (e) {
+    return false;
+  }
+}
 
 async function ensureServerRunning() {
   let isSystemdActive = false;
@@ -20,25 +48,67 @@ async function ensureServerRunning() {
       }).trim() === 'active';
   } catch (e) {}
 
-  if (!isSystemdActive) {
-    process.stdout.write('\x1b[38;2;81;175;239m➜\x1b[0m Starting agy-babysitter service...');
-    try {
-      execSync('systemctl --user start agy-babysitter.service 2>/dev/null', { stdio: 'ignore' });
-    } catch (e) {}
-    process.stdout.write(' \x1b[38;2;152;190;101mactive!\x1b[0m\n');
+  if (isSystemdActive) {
+    return true;
   }
+
+  process.stdout.write('\x1b[38;2;81;175;239m➜\x1b[0m Starting agy-babysitter service...');
+  try {
+    execSync('systemctl --user start agy-babysitter.service 2>/dev/null', { stdio: 'ignore' });
+  } catch (e) {
+    if (!isServerRunning()) {
+      const proc = spawn(process.execPath, [serverScript], {
+        detached: true,
+        stdio: 'ignore',
+        cwd: rootDir
+      });
+      proc.unref();
+    }
+  }
+
+  // Poll for up to 5 seconds until active
+  const start = Date.now();
+  while (Date.now() - start < 5000) {
+    try {
+      const active =
+        execSync('systemctl --user is-active agy-babysitter.service 2>/dev/null', {
+          encoding: 'utf8'
+        }).trim() === 'active';
+      if (active) {
+        process.stdout.write(' \x1b[38;2;152;190;101mactive!\x1b[0m\n');
+        return true;
+      }
+    } catch (e) {}
+    if (isServerRunning()) {
+      process.stdout.write(' \x1b[38;2;152;190;101mrunning!\x1b[0m\n');
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
+  process.stdout.write(' \x1b[38;2;236;190;123mready\x1b[0m\n');
+  return true;
 }
 
-function attachNativeTmux(sessionName, cwd, command) {
+function attachSession(sessionName, cwd, command) {
   const name = sanitizeSessionName(sessionName);
+  const targetCwd = resolveTilde(cwd || config.DEFAULT_CWD);
+
+  if (!fs.existsSync(targetCwd)) {
+    fs.mkdirSync(targetCwd, { recursive: true });
+  }
+
   if (!hasSession(name)) {
-    createSession({ name, cwd: cwd || process.cwd(), command });
+    createSession({ name, cwd: targetCwd, command });
   } else {
     applyTmuxGlobalOptions(name);
   }
 
-  // Spawn tmux attach directly with inherited stdio for 100% native terminal performance
+  process.stdout.write('\x1b[?25h'); // ensure cursor visible
+
+  // Attach directly to tmux with inherited stdio for 100% native terminal speed
   const child = spawn('tmux', ['attach-session', '-t', name], {
+    cwd: targetCwd,
     stdio: 'inherit',
     env: {
       ...process.env,
@@ -48,125 +118,382 @@ function attachNativeTmux(sessionName, cwd, command) {
     }
   });
 
-  child.on('exit', (code) => {
-    process.exit(code || 0);
+  child.on('exit', (code, signal) => {
+    process.exit(code ?? (signal ? 1 : 0));
   });
 }
 
-async function handleInteractiveSelect() {
-  await ensureServerRunning();
-  const sessions = listSessions();
-  const currentFolder = path.basename(process.cwd());
-
-  // If a session matching current directory exists, attach directly
-  const match = sessions.find((s) => s.name === currentFolder);
-  if (match) {
-    console.log(`Attaching to existing session '\x1b[36m${match.name}\x1b[0m'... (Press \x1b[33mCtrl+b d\x1b[0m to detach)`);
-    attachNativeTmux(match.name, match.cwd);
-    return;
-  }
-
-  if (sessions.length === 0) {
-    console.log(`Creating and attaching to session '\x1b[36m${currentFolder}\x1b[0m'... (Press \x1b[33mCtrl+b d\x1b[0m to detach)`);
-    attachNativeTmux(currentFolder, process.cwd());
-    return;
-  }
-
-  console.log('\n\x1b[1mActive agy-babysitter Sessions:\x1b[0m');
-  sessions.forEach((s, idx) => {
-    console.log(`  \x1b[36m${idx + 1})\x1b[0m \x1b[1m${s.name}\x1b[0m (${s.cwd})`);
-  });
-  console.log(`  \x1b[32m+)\x1b[0m Create new session for current directory (\x1b[1m${currentFolder}\x1b[0m)\n`);
-
+function question(query) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
-
-  rl.question('Select a session number or press ENTER for current directory: ', (ans) => {
-    rl.close();
-    const choice = ans.trim();
-    if (!choice || choice === '+') {
-      attachNativeTmux(currentFolder, process.cwd());
-      return;
-    }
-
-    const num = parseInt(choice, 10);
-    if (!isNaN(num) && num >= 1 && num <= sessions.length) {
-      const target = sessions[num - 1];
-      attachNativeTmux(target.name, target.cwd);
-      return;
-    }
-
-    // Check if typed name directly
-    const byName = sessions.find((s) => s.name === choice);
-    if (byName) {
-      attachNativeTmux(byName.name, byName.cwd);
-    } else {
-      attachNativeTmux(choice, process.cwd());
-    }
+  return new Promise((resolve) => {
+    rl.question(query, (ans) => {
+      rl.close();
+      resolve(ans.trim());
+    });
   });
 }
 
-// CLI Command Router
-const args = process.argv.slice(2);
-const command = args[0];
+async function promptCreateSession() {
+  process.stdout.write('\n\x1b[1m\x1b[38;2;152;190;101mCreate New agy Session\x1b[0m\n');
+  process.stdout.write('\x1b[38;2;91;98;104m' + '─'.repeat(40) + '\x1b[0m\n');
 
-if (!command || command === 'attach') {
-  const sessionArg = args[1];
-  if (sessionArg) {
-    ensureServerRunning().then(() => {
-      attachNativeTmux(sessionArg);
+  const defaultDir = process.cwd();
+  const rawPath = await question(
+    `\x1b[38;2;81;175;239mDirectory path\x1b[0m [\x1b[38;2;91;98;104m${formatDisplayPath(defaultDir)}\x1b[0m]: `
+  );
+  const sessionCwd = rawPath ? resolveTilde(rawPath) : defaultDir;
+
+  const defaultName = sanitizeSessionName(path.basename(sessionCwd));
+  const rawName = await question(
+    `\x1b[38;2;81;175;239mSession name\x1b[0m [\x1b[38;2;91;98;104m${defaultName}\x1b[0m]: `
+  );
+  const sessionName = rawName ? sanitizeSessionName(rawName) : defaultName;
+
+  process.stdout.write(
+    `\n\x1b[38;2;81;175;239m➜\x1b[0m Launching session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
+  );
+
+  createSession({ name: sessionName, cwd: sessionCwd });
+  attachSession(sessionName, sessionCwd);
+}
+
+function stopService() {
+  process.stdout.write('\n\x1b[38;2;255;108;107mStopping agy-babysitter service...\x1b[0m\n');
+  try {
+    execSync('systemctl --user stop agy-babysitter.service 2>/dev/null');
+  } catch (e) {}
+  try {
+    execSync('pkill -f "node.*server.js" 2>/dev/null');
+  } catch (e) {}
+  process.stdout.write('\x1b[38;2;152;190;101m✓ agy-babysitter service stopped.\x1b[0m\n\n');
+}
+
+function restartService() {
+  process.stdout.write('\n\x1b[38;2;236;190;123mRestarting agy-babysitter service...\x1b[0m\n');
+  try {
+    execSync('systemctl --user restart agy-babysitter.service', { stdio: 'inherit' });
+    process.stdout.write('\x1b[38;2;152;190;101m✓ Service restarted successfully.\x1b[0m\n\n');
+  } catch (e) {
+    console.error('Failed to restart service:', e.message);
+  }
+}
+
+function streamLogs() {
+  process.stdout.write('\x1b[?25h');
+  const journal = spawn('journalctl', ['--user', '-u', 'agy-babysitter', '-f', '-n', '50'], {
+    stdio: 'inherit'
+  });
+  journal.on('exit', () => process.exit(0));
+}
+
+async function showInteractiveMenu() {
+  await ensureServerRunning();
+  const sessions = listSessions();
+
+  const items = [];
+  sessions.forEach((s) => {
+    items.push({
+      type: 'session',
+      name: s.name,
+      path: s.cwd || config.DEFAULT_CWD,
+      badge: s.name === config.DEFAULT_SESSION ? '(Default)' : ''
     });
-  } else {
-    handleInteractiveSelect();
-  }
-} else if (command === 'list' || command === 'ls') {
-  ensureServerRunning().then(() => {
-    const sessions = listSessions();
-    if (sessions.length === 0) {
-      console.log('No active sessions.');
-    } else {
-      console.log('\x1b[1mActive Sessions:\x1b[0m');
-      sessions.forEach((s) => {
-        console.log(`  - \x1b[36m${s.name}\x1b[0m (cwd: ${s.cwd}, attached: ${s.attached})`);
-      });
+  });
+
+  items.push({ type: 'create', key: '+', label: '+ Start new session...' });
+  items.push({ type: 'restart', key: 'r', label: '↻ Restart service' });
+  items.push({ type: 'stop', key: 's', label: '■ Stop service' });
+  items.push({ type: 'logs', key: 'l', label: '▤ Follow logs' });
+  items.push({ type: 'quit', key: 'q', label: '✕ Quit' });
+
+  let selectedIndex = 0;
+  let renderedLines = 0;
+
+  function render() {
+    if (renderedLines > 0) {
+      process.stdout.write(`\x1b[${renderedLines}A\x1b[0J`);
     }
-  });
-} else if (command === 'kill') {
-  const sessionArg = args[1];
-  if (!sessionArg) {
-    console.error('Usage: agyh kill <session-name>');
-    process.exit(1);
+
+    const lines = [];
+    lines.push(
+      '\x1b[1m\x1b[38;2;81;175;239magy-babysitter\x1b[0m \x1b[38;2;91;98;104m•\x1b[0m \x1b[38;2;223;223;223mActive Sessions\x1b[0m'
+    );
+    lines.push('\x1b[38;2;91;98;104m' + '─'.repeat(58) + '\x1b[0m');
+
+    items.forEach((item, idx) => {
+      const isSelected = idx === selectedIndex;
+      const pointer = isSelected ? '\x1b[38;2;81;175;239m❯\x1b[0m ' : '  ';
+
+      if (item.type === 'session') {
+        const num = `\x1b[38;2;91;98;104m[${idx + 1}]\x1b[0m`;
+        const nameColor = isSelected ? '\x1b[1m\x1b[38;2;81;175;239m' : '\x1b[38;2;223;223;223m';
+        const displayPath = `\x1b[38;2;91;98;104m${formatDisplayPath(item.path)}\x1b[0m`;
+        const badge = item.badge ? ` \x1b[38;2;152;190;101m${item.badge}\x1b[0m` : '';
+        lines.push(`${pointer}${num} ${nameColor}${item.name.padEnd(20)}\x1b[0m ${displayPath}${badge}`);
+      } else if (item.type === 'create') {
+        const keyTag = `\x1b[38;2;91;98;104m[+]\x1b[0m`;
+        const color = isSelected ? '\x1b[1m\x1b[38;2;152;190;101m' : '\x1b[38;2;152;190;101m';
+        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
+      } else if (item.type === 'restart') {
+        const keyTag = `\x1b[38;2;91;98;104m[r]\x1b[0m`;
+        const color = isSelected ? '\x1b[1m\x1b[38;2;236;190;123m' : '\x1b[38;2;236;190;123m';
+        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
+      } else if (item.type === 'stop') {
+        const keyTag = `\x1b[38;2;91;98;104m[s]\x1b[0m`;
+        const color = isSelected ? '\x1b[1m\x1b[38;2;255;108;107m' : '\x1b[38;2;255;108;107m';
+        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
+      } else if (item.type === 'logs') {
+        const keyTag = `\x1b[38;2;91;98;104m[l]\x1b[0m`;
+        const color = isSelected ? '\x1b[1m\x1b[38;2;70;217;255m' : '\x1b[38;2;70;217;255m';
+        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
+      } else if (item.type === 'quit') {
+        const keyTag = `\x1b[38;2;91;98;104m[q]\x1b[0m`;
+        const color = isSelected ? '\x1b[1m\x1b[38;2;91;98;104m' : '\x1b[38;2;91;98;104m';
+        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
+      }
+    });
+
+    lines.push('\x1b[38;2;91;98;104m' + '─'.repeat(58) + '\x1b[0m');
+    lines.push(
+      '\x1b[38;2;91;98;104mUse ↑/↓ to navigate, Enter to select, 1-9 to jump, q to exit\x1b[0m'
+    );
+
+    renderedLines = lines.length;
+    process.stdout.write(lines.join('\n') + '\n');
   }
-  ensureServerRunning().then(() => {
-    const ok = terminateSession(sessionArg);
-    console.log(ok ? `✓ Terminated session '${sessionArg}'` : `Session '${sessionArg}' not found`);
+
+  process.stdout.write('\x1b[?25l'); // hide cursor
+  render();
+
+  return new Promise((resolve) => {
+    readline.emitKeypressEvents(process.stdin);
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+
+    const cleanup = () => {
+      process.stdout.write('\x1b[?25h'); // show cursor
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+      }
+      process.stdin.removeListener('keypress', onKeypress);
+    };
+
+    const onKeypress = async (str, key) => {
+      if (!key) return;
+
+      if (key.ctrl && key.name === 'c') {
+        cleanup();
+        process.exit(0);
+      }
+
+      if (key.name === 'up' || key.name === 'k') {
+        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+        render();
+        return;
+      }
+
+      if (key.name === 'down' || key.name === 'j') {
+        selectedIndex = (selectedIndex + 1) % items.length;
+        render();
+        return;
+      }
+
+      if (key.name === 'q' || key.name === 'escape') {
+        cleanup();
+        process.stdout.write('\n');
+        process.exit(0);
+      }
+
+      if (key.name === 'r' && !key.ctrl) {
+        cleanup();
+        restartService();
+        await showInteractiveMenu();
+        return;
+      }
+
+      if (key.name === 's' && !key.ctrl) {
+        cleanup();
+        stopService();
+        process.exit(0);
+      }
+
+      if (key.name === 'l' && !key.ctrl) {
+        cleanup();
+        streamLogs();
+        return;
+      }
+
+      if (str === '+' || key.name === 'n') {
+        cleanup();
+        await promptCreateSession();
+        return;
+      }
+
+      // Check number keys 1-9
+      const num = parseInt(str, 10);
+      if (!isNaN(num) && num >= 1 && num <= sessions.length) {
+        cleanup();
+        const target = items[num - 1];
+        process.stdout.write(`\n\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '${target.name}'...\n\n`);
+        attachSession(target.name, target.path);
+        return;
+      }
+
+      if (key.name === 'return' || key.name === 'enter') {
+        cleanup();
+        const selected = items[selectedIndex];
+
+        if (selected.type === 'session') {
+          process.stdout.write(
+            `\n\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${selected.name}\x1b[0m'...\n\n`
+          );
+          attachSession(selected.name, selected.path);
+        } else if (selected.type === 'create') {
+          await promptCreateSession();
+        } else if (selected.type === 'restart') {
+          restartService();
+          await showInteractiveMenu();
+        } else if (selected.type === 'stop') {
+          stopService();
+          process.exit(0);
+        } else if (selected.type === 'logs') {
+          streamLogs();
+        } else if (selected.type === 'quit') {
+          process.stdout.write('\n');
+          process.exit(0);
+        }
+        resolve();
+      }
+    };
+
+    process.stdin.on('keypress', onKeypress);
   });
-} else if (command === 'status') {
-  try {
-    execSync('systemctl --user status agy-babysitter.service', { stdio: 'inherit' });
-  } catch (e) {}
-} else if (command === 'logs') {
-  try {
-    execSync('journalctl --user -u agy-babysitter -f', { stdio: 'inherit' });
-  } catch (e) {}
-} else if (command === 'web') {
-  console.log(`agy-babysitter web dashboard: http://${config.HOST || '0.0.0.0'}:${config.PORT || 8080}`);
-} else {
-  console.log(`
-\x1b[1magyh\x1b[0m - Native CLI helper for agy-babysitter (tmux backend)
+}
 
-\x1b[1mUsage:\x1b[0m
-  agyh                  Select or attach to a session for current folder
-  agyh attach <name>    Attach to a specific session
-  agyh list             List all active background sessions
-  agyh kill <name>      Terminate a background session
-  agyh web              Print Web UI URL
-  agyh status           Show systemd service status
-  agyh logs             View live daemon logs
+// Main CLI Entrypoint
+async function main() {
+  const args = process.argv.slice(2);
 
-\x1b[1mShortcut:\x1b[0m
+  // Handle flags and subcommands
+  if (args.includes('-r') || args.includes('--restart') || args.includes('restart')) {
+    restartService();
+    return;
+  }
+
+  if (args.includes('-k') || args.includes('--stop') || args.includes('stop')) {
+    stopService();
+    return;
+  }
+
+  if (args.includes('-s') || args.includes('--status') || args.includes('status')) {
+    try {
+      execSync('systemctl --user status agy-babysitter.service', { stdio: 'inherit' });
+    } catch (e) {}
+    return;
+  }
+
+  if (args.includes('-l') || args.includes('--logs') || args.includes('logs')) {
+    streamLogs();
+    return;
+  }
+
+  if (args.includes('-h') || args.includes('--help') || args.includes('help')) {
+    console.log(`
+\x1b[1m\x1b[38;2;81;175;239magyh\x1b[0m - Antigravity CLI Babysitter Helper
+
+\x1b[1mUSAGE:\x1b[0m
+  agyh                     Interactive TUI session selector
+  agyh <path>              Open/create session for directory path (e.g. agyh ~/Github/my-repo)
+  agyh <session-name>      Attach to or create named session
+  agyh -r, --restart       Restart agy-babysitter systemd service
+  agyh -k, --stop          Stop agy-babysitter systemd service
+  agyh -s, --status        Check systemd service status
+  agyh -l, --logs          Follow service journal logs
+  agyh -h, --help          Show this help message
+
+\x1b[1mSHORTCUT:\x1b[0m
   Press \x1b[33mCtrl+b d\x1b[0m inside any session to detach cleanly without closing it.
 `);
+    return;
+  }
+
+  // If a path or session name was passed as argument
+  if (args.length > 0 && args[0] && !args[0].startsWith('-')) {
+    await ensureServerRunning();
+    const target = args[0];
+    const resolvedPath = resolveTilde(target);
+
+    // Case 1: Target is an existing directory path
+    if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
+      const targetCwd = resolvedPath;
+      const sessions = listSessions();
+
+      // Check if a session already exists pointing to this exact path
+      const existingForPath = sessions.find((s) => s.cwd === targetCwd);
+      if (existingForPath) {
+        process.stdout.write(
+          `\x1b[38;2;81;175;239m➜\x1b[0m Found active session '\x1b[1m${existingForPath.name}\x1b[0m' for \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m. Attaching...\n\n`
+        );
+        attachSession(existingForPath.name, targetCwd);
+        return;
+      }
+
+      // Check if a session with basename exists
+      const baseName = sanitizeSessionName(path.basename(targetCwd));
+      const existingByName = sessions.find((s) => s.name === baseName);
+      if (existingByName) {
+        process.stdout.write(
+          `\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${existingByName.name}\x1b[0m'...\n\n`
+        );
+        attachSession(existingByName.name, targetCwd);
+        return;
+      }
+
+      // Create new session for this path
+      process.stdout.write(
+        `\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${baseName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m...\n\n`
+      );
+      createSession({ name: baseName, cwd: targetCwd });
+      attachSession(baseName, targetCwd);
+      return;
+    }
+
+    // Case 2: Target is a session name
+    const sessionName = sanitizeSessionName(target);
+    const sessions = listSessions();
+    const existing = sessions.find((s) => s.name === sessionName);
+    const sessionCwd = existing?.cwd || process.cwd();
+
+    if (existing) {
+      process.stdout.write(`\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${sessionName}\x1b[0m'...\n\n`);
+      attachSession(sessionName, sessionCwd);
+      return;
+    }
+
+    // New named session
+    process.stdout.write(
+      `\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
+    );
+    createSession({ name: sessionName, cwd: sessionCwd });
+    attachSession(sessionName, sessionCwd);
+    return;
+  }
+
+  // No arguments: Interactive TUI Menu
+  if (process.stdin.isTTY) {
+    await showInteractiveMenu();
+  } else {
+    // Non-interactive fallback: attach to default session
+    await ensureServerRunning();
+    attachSession(config.DEFAULT_SESSION, config.DEFAULT_CWD);
+  }
 }
+
+main().catch((err) => {
+  console.error('Error in agyh:', err);
+  process.exit(1);
+});
