@@ -10,7 +10,6 @@ import hooksRouter from './routes/hooks.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
 import { touchWakelock, stopAllWakelocks } from './wakelock.js';
 import { initSessionMonitor, stopSessionMonitor } from './sessionMonitor.js';
-import { startIpcServer } from './ipcServer.js';
 
 // Clean up any stale or duplicate wakelocks from previous runs
 stopAllWakelocks();
@@ -71,11 +70,10 @@ app.get('{*path}', (req, res, next) => {
   }
 });
 
-// WebSocket, Live-reload Asset Watcher, Native Terminal IPC, and Session Background Monitor
+// WebSocket, Live-reload Asset Watcher, and Session Background Monitor
 const wss = setupWebSocketServer(server);
 setupAssetWatcher(wss, clientDir);
 initSessionMonitor(wss);
-const ipcServer = startIpcServer();
 
 server.listen(config.PORT, config.HOST, () => {
   touchWakelock();
@@ -90,9 +88,6 @@ function handleGracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`[Server] Received ${signal}, notifying connected clients of update...`);
-  try {
-    if (ipcServer) ipcServer.close();
-  } catch (e) {}
   stopSessionMonitor();
   stopAllWakelocks();
   broadcastServerRestart(wss);

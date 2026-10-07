@@ -3,7 +3,7 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { touchWakelock } from './wakelock.js';
-import { createOrGetSession, getSession } from './sessionManager.js';
+import { attachPtySession } from './tmuxManager.js';
 import { markTurnStarted, clearNotification, getAllNotificationStates } from './sessionMonitor.js';
 
 /**
@@ -22,40 +22,30 @@ export function setupWebSocketServer(server) {
     const cols = parseInt(parsedUrl.query.cols, 10) || 100;
     const rows = parseInt(parsedUrl.query.rows, 10) || 30;
 
-    let session = null;
-    let clientObj = null;
+    let ptyProcess = null;
     let isClosed = false;
 
     try {
-      session = createOrGetSession({
-        name: sessionName,
+      ptyProcess = attachPtySession({
+        sessionName,
         cols,
         rows
       });
 
-      clientObj = {
-        type: 'ws',
-        send: (data) => {
-          if (!isClosed && ws.readyState === WebSocket.OPEN) {
-            ws.send(data);
-          }
-        },
-        close: () => {
-          if (!isClosed && ws.readyState === WebSocket.OPEN) {
-            ws.close(1000, 'Session closed');
-          }
+      ptyProcess.onData((data) => {
+        if (!isClosed && ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
         }
-      };
+        touchWakelock();
+      });
 
-      session.addClient(clientObj);
-
-      // Immediately send existing terminal history buffer so the terminal paints instantly
-      const history = session.getHistory();
-      if (history && ws.readyState === WebSocket.OPEN) {
-        ws.send(history);
-      }
+      ptyProcess.onExit(({ exitCode, signal }) => {
+        if (!isClosed && ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, `Session detached (code: ${exitCode})`.slice(0, 120));
+        }
+      });
     } catch (err) {
-      console.error('Failed to attach to session:', err);
+      console.error('Failed to attach to tmux session:', err);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(`\r\n\x1b[31m[Error attaching to session '${sessionName}': ${err.message}]\x1b[0m\r\n`);
         ws.close(1011, (err.message || 'Error attaching').slice(0, 120));
@@ -76,7 +66,7 @@ export function setupWebSocketServer(server) {
     // Handle messages/actions coming from the browser
     ws.on('message', (message) => {
       touchWakelock();
-      if (!session) return;
+      if (!ptyProcess) return;
 
       const raw = message.toString();
 
@@ -87,17 +77,19 @@ export function setupWebSocketServer(server) {
           if (payload.type === 'resize' && payload.cols && payload.rows) {
             const newCols = Math.max(20, payload.cols);
             const newRows = Math.max(5, payload.rows);
-            session.resize(newCols, newRows);
+            try {
+              ptyProcess.resize(newCols, newRows);
+            } catch (e) {}
             return;
           } else if (payload.type === 'input') {
-            session.write(payload.data);
+            ptyProcess.write(payload.data);
             return;
           } else if (payload.type === 'action') {
             markTurnStarted(sessionName);
-            if (payload.action === 'approve') session.write('y\n');
-            else if (payload.action === 'deny') session.write('n\n');
-            else if (payload.action === 'interrupt') session.write('\x03');
-            else if (payload.action === 'enter') session.write('\r');
+            if (payload.action === 'approve') ptyProcess.write('y\n');
+            else if (payload.action === 'deny') ptyProcess.write('n\n');
+            else if (payload.action === 'interrupt') ptyProcess.write('\x03');
+            else if (payload.action === 'enter') ptyProcess.write('\r');
             return;
           } else if (payload.type === 'clear_notification') {
             clearNotification(payload.session || sessionName);
@@ -108,16 +100,17 @@ export function setupWebSocketServer(server) {
         }
       }
 
-      session.write(raw);
+      ptyProcess.write(raw);
     });
 
     const cleanup = () => {
       if (isClosed) return;
       isClosed = true;
-      if (session && clientObj) {
-        session.removeClient(clientObj);
-        session = null;
-        clientObj = null;
+      if (ptyProcess) {
+        try {
+          ptyProcess.kill();
+        } catch (e) {}
+        ptyProcess = null;
       }
     };
 

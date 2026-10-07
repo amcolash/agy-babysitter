@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import config, { resolveTilde } from '../config.js';
-import { listActiveSessions, createOrGetSession, terminateSession, getUniqueSessionName, hasSession } from '../sessionManager.js';
+import { listSessions, createSession, terminateSession, getUniqueSessionName, hasSession } from '../tmuxManager.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { touchWakelock, getWakelockStatus } from '../wakelock.js';
 import { getRecentSessions } from '../recentSessions.js';
@@ -27,7 +27,7 @@ router.get('/sessions/recent', async (req, res) => {
 // API: List active sessions
 router.get('/sessions', async (req, res) => {
   try {
-    const sessions = listActiveSessions();
+    const sessions = listSessions();
     res.json({ sessions });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -47,9 +47,9 @@ router.post('/sessions', async (req, res) => {
     }
 
     const sessionName = name && name.trim() ? name.trim() : path.basename(sessionCwd);
-    const session = createOrGetSession({ name: sessionName, command, cwd: sessionCwd });
+    const session = createSession({ name: sessionName, command, cwd: sessionCwd });
     touchWakelock(true);
-    res.json({ name: session.name, created: true });
+    res.json({ name: session.name, created: session.created });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
