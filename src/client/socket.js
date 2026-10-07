@@ -165,49 +165,14 @@ if (typeof window !== 'undefined') {
     }
   });
 
-  let inactiveTimer = null;
-
-  function handleInactiveState() {
-    if (inactiveTimer) clearTimeout(inactiveTimer);
-    inactiveTimer = setTimeout(() => {
-      if (ws) {
-        console.log('[Socket] Inactive window detected - pausing terminal stream...');
-        const savedSession = currentSession;
-        if (ws) {
-          const oldWs = ws;
-          ws = null;
-          oldWs.onclose = null;
-          oldWs.onerror = null;
-          try { oldWs.close(); } catch (e) {}
-        }
-        currentSession = savedSession;
-        updateStatus('paused', 'Paused (unfocused)');
-      }
-    }, 800);
-  }
-
-  function handleActiveState() {
-    if (inactiveTimer) {
-      clearTimeout(inactiveTimer);
-      inactiveTimer = null;
-    }
-    if (!isSocketConnected() && currentSession) {
-      console.log('[Socket] Active window detected - resuming terminal stream...');
-      connectTerminal(currentSession);
-    }
-  }
-
-  window.addEventListener('blur', handleInactiveState);
+  // Reconnect if connection was dropped while tab was in background
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      handleInactiveState();
-    } else {
-      handleActiveState();
+    if (document.visibilityState === 'visible') {
+      if (!isSocketConnected() && currentSession) {
+        connectTerminal(currentSession);
+      }
     }
   });
-
-  window.addEventListener('focus', handleActiveState);
-  window.addEventListener('click', handleActiveState);
 }
 
 export function scheduleReconnect(sessionName) {
