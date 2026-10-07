@@ -3,7 +3,7 @@ import os from 'os';
 import config from './config.js';
 let wakelockProcess = null;
 let inactivityTimer = null;
-let lastActiveTimestamp = Date.now();
+let lastActiveTimestamp = null;
 const TIMEOUT_MS = (config.WAKELOCK_TIMEOUT_MINUTES || 20) * 60 * 1000;
 let lastTouch = 0;
 
@@ -20,7 +20,7 @@ function spawnWakelockProcess() {
 
   if (platform === 'linux') {
     cmd = 'systemd-inhibit';
-    args = ['--what=idle:sleep', '--who=agy-babysitter', '--why=Active terminal session', 'sleep', 'infinity'];
+    args = ['--what=idle:sleep', '--who=agy-babysitter', '--why=Active notification session', 'sleep', 'infinity'];
   } else if (platform === 'darwin') {
     cmd = 'caffeinate';
     args = ['-d', '-i', '-m', '-u', '-w', String(process.pid)];
@@ -69,7 +69,7 @@ export function releaseWakelock() {
     inactivityTimer = null;
   }
   if (wakelockProcess) {
-    console.log('[Wakelock] Released (inactivity timeout reached)');
+    console.log(`[Wakelock] Released (no notifications received for ${config.WAKELOCK_TIMEOUT_MINUTES || 20}m)`);
     try {
       if (wakelockProcess.pid) {
         process.kill(-wakelockProcess.pid, 'SIGKILL');
@@ -125,10 +125,6 @@ export function stopAllWakelocks() {
   } catch (e) {}
 
   try {
-    execSync("pkill -9 -f 'sleep infinity' 2>/dev/null || true", { stdio: 'ignore' });
-  } catch (e) {}
-
-  try {
     execSync("pkill -9 -f 'caffeinate -d -i -m -u' 2>/dev/null || true", { stdio: 'ignore' });
   } catch (e) {}
 }
@@ -165,11 +161,13 @@ export function touchWakelock(force = false) {
  * Get the current status of the wakelock
  */
 export function getWakelockStatus() {
-  const remainingMs = wakelockProcess ? Math.max(0, TIMEOUT_MS - (Date.now() - lastActiveTimestamp)) : 0;
+  const remainingMs = (wakelockProcess && lastActiveTimestamp)
+    ? Math.max(0, TIMEOUT_MS - (Date.now() - lastActiveTimestamp))
+    : 0;
   return {
     active: !!wakelockProcess,
     timeoutMinutes: config.WAKELOCK_TIMEOUT_MINUTES || 20,
-    lastActive: new Date(lastActiveTimestamp).toISOString(),
+    lastActive: lastActiveTimestamp ? new Date(lastActiveTimestamp).toISOString() : null,
     remainingSeconds: Math.round(remainingMs / 1000)
   };
 }

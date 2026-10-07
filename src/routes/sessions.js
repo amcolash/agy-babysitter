@@ -3,7 +3,7 @@ import path from 'path';
 import config, { resolveTilde } from '../config.js';
 import { listSessions, createSession, terminateSession, getUniqueSessionName, hasSession } from '../tmuxManager.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
-import { touchWakelock, getWakelockStatus } from '../wakelock.js';
+import { getWakelockStatus } from '../wakelock.js';
 import { getRecentSessions } from '../recentSessions.js';
 
 const router = express.Router();
@@ -48,7 +48,6 @@ router.post('/sessions', async (req, res) => {
 
     const sessionName = name && name.trim() ? name.trim() : path.basename(sessionCwd);
     const session = createSession({ name: sessionName, command, cwd: sessionCwd });
-    touchWakelock(true);
     res.json({ name: session.name, created: session.created });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -59,7 +58,6 @@ router.post('/sessions', async (req, res) => {
 router.delete('/sessions/:name', async (req, res) => {
   try {
     const success = terminateSession(req.params.name);
-    touchWakelock(true);
     res.json({ success });
   } catch (err) {
     res.status(500).json({ error: err.message });

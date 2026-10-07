@@ -8,7 +8,7 @@ import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
 import hooksRouter from './routes/hooks.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
-import { touchWakelock, stopAllWakelocks } from './wakelock.js';
+import { stopAllWakelocks } from './wakelock.js';
 import { initSessionMonitor, stopSessionMonitor } from './sessionMonitor.js';
 
 // Clean up any stale or duplicate wakelocks from previous runs
@@ -76,7 +76,6 @@ setupAssetWatcher(wss, clientDir);
 initSessionMonitor(wss);
 
 server.listen(config.PORT, config.HOST, () => {
-  touchWakelock();
   console.log(`agy babysitter running at http://${config.HOST}:${config.PORT}`);
   console.log(`Default session: ${config.DEFAULT_SESSION}, default directory: ${config.DEFAULT_CWD}`);
   console.log(`Allowed directories: ${config.ALLOWED_DIRECTORIES.map(formatDisplayPath).join(', ')}`);

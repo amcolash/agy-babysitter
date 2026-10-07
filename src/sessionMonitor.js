@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { touchWakelock } from './wakelock.js';
 
 // Stores notification state per session: Map<sessionName, 'settled' | 'input' | null>
 const sessionStates = new Map();
@@ -37,6 +38,7 @@ export function handleLifecycleHookEvent({ event, session, conversationId, toolC
   if (!session) return;
 
   console.log(`[LifecycleHook] Received event '${event}' for session '${session}'`);
+  touchWakelock();
 
   if (event === 'pre_invocation') {
     // Agent started thinking/working: clear notification state

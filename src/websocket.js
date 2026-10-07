@@ -2,7 +2,6 @@ import url from 'url';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
-import { touchWakelock } from './wakelock.js';
 import { attachPtySession } from './tmuxManager.js';
 import { markTurnStarted, clearNotification, getAllNotificationStates } from './sessionMonitor.js';
 
@@ -15,8 +14,6 @@ export function setupWebSocketServer(server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', async (ws, req) => {
-    touchWakelock(true);
-
     const parsedUrl = url.parse(req.url, true);
     const sessionName = parsedUrl.query.session || config.DEFAULT_SESSION;
     const cols = parseInt(parsedUrl.query.cols, 10) || 100;
@@ -36,7 +33,6 @@ export function setupWebSocketServer(server) {
         if (!isClosed && ws.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
-        touchWakelock();
       });
 
       ptyProcess.onExit(({ exitCode, signal }) => {
@@ -65,7 +61,6 @@ export function setupWebSocketServer(server) {
 
     // Handle messages/actions coming from the browser
     ws.on('message', (message) => {
-      touchWakelock();
       if (!ptyProcess) return;
 
       const raw = message.toString();
