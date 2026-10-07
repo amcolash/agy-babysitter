@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn, execSync } from 'child_process';
+import { spawn, spawnSync, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -104,10 +104,17 @@ function attachSession(sessionName, cwd, command) {
     applyTmuxGlobalOptions(name);
   }
 
-  process.stdout.write('\x1b[?25h'); // ensure cursor visible
+  // Restore cursor visibility and pause Node's stdin reading before passing stdio to tmux
+  process.stdout.write('\x1b[?25h');
+  if (process.stdin.isTTY) {
+    try {
+      process.stdin.setRawMode(false);
+    } catch (e) {}
+  }
+  process.stdin.pause();
 
-  // Attach directly to tmux with inherited stdio for 100% native terminal speed
-  const child = spawn('tmux', ['attach-session', '-t', name], {
+  // Attach directly to tmux synchronously with inherited stdio for 100% native terminal speed
+  const res = spawnSync('tmux', ['attach-session', '-t', name], {
     cwd: targetCwd,
     stdio: 'inherit',
     env: {
@@ -117,9 +124,7 @@ function attachSession(sessionName, cwd, command) {
     }
   });
 
-  child.on('exit', (code, signal) => {
-    process.exit(code ?? (signal ? 1 : 0));
-  });
+  process.exit(res.status ?? (res.signal ? 1 : 0));
 }
 
 function question(query) {
@@ -182,10 +187,17 @@ function restartService() {
 
 function streamLogs() {
   process.stdout.write('\x1b[?25h');
-  const journal = spawn('journalctl', ['--user', '-u', 'agy-babysitter', '-f', '-n', '50'], {
+  if (process.stdin.isTTY) {
+    try {
+      process.stdin.setRawMode(false);
+    } catch (e) {}
+  }
+  process.stdin.pause();
+
+  const res = spawnSync('journalctl', ['--user', '-u', 'agy-babysitter', '-f', '-n', '50'], {
     stdio: 'inherit'
   });
-  journal.on('exit', () => process.exit(0));
+  process.exit(res.status ?? (res.signal ? 1 : 0));
 }
 
 async function showInteractiveMenu() {
@@ -272,13 +284,17 @@ async function showInteractiveMenu() {
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
     }
+    process.stdin.resume();
 
     const cleanup = () => {
       process.stdout.write('\x1b[?25h'); // show cursor
       if (process.stdin.isTTY) {
-        process.stdin.setRawMode(false);
+        try {
+          process.stdin.setRawMode(false);
+        } catch (e) {}
       }
       process.stdin.removeListener('keypress', onKeypress);
+      process.stdin.pause();
     };
 
     const onKeypress = async (str, key) => {
@@ -311,6 +327,7 @@ async function showInteractiveMenu() {
         cleanup();
         restartService();
         await showInteractiveMenu();
+        resolve();
         return;
       }
 
@@ -329,6 +346,7 @@ async function showInteractiveMenu() {
       if (str === '+' || key.name === 'n') {
         cleanup();
         await promptCreateSession();
+        resolve();
         return;
       }
 
@@ -353,9 +371,11 @@ async function showInteractiveMenu() {
           attachSession(selected.name, selected.path);
         } else if (selected.type === 'create') {
           await promptCreateSession();
+          resolve();
         } else if (selected.type === 'restart') {
           restartService();
           await showInteractiveMenu();
+          resolve();
         } else if (selected.type === 'stop') {
           stopService();
           process.exit(0);
@@ -365,7 +385,6 @@ async function showInteractiveMenu() {
           process.stdout.write('\n');
           process.exit(0);
         }
-        resolve();
       }
     };
 
