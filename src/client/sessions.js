@@ -366,7 +366,11 @@ export function updateSessionTabIcons() {
       headerStatusDot.className = 'w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center';
     } else {
       headerStatusDot.innerHTML = '';
-      headerStatusDot.className = 'dot connected status-dot flex-shrink-0';
+      const isPaused = headerStatusDot.classList.contains('paused');
+      const isDisconnected = headerStatusDot.classList.contains('disconnected');
+      const isConnecting = headerStatusDot.classList.contains('connecting');
+      const stateClass = isPaused ? 'paused' : isDisconnected ? 'disconnected' : isConnecting ? 'connecting' : 'connected';
+      headerStatusDot.className = `dot ${stateClass} status-dot flex-shrink-0`;
     }
   }
 }

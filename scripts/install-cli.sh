@@ -27,5 +27,8 @@ else
   echo -e "\x1b[32m✓ ${CLI_TARGET} is ready to use in your shell!\x1b[0m"
 fi
 
+# Install Antigravity lifecycle hooks
+"${REPO_DIR}/scripts/install-hooks.sh"
+
 echo ""
 echo "Try running: agyh --help"

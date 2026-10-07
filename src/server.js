@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import config from './config.js';
 import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
+import hooksRouter from './routes/hooks.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
 import { touchWakelock, stopAllWakelocks } from './wakelock.js';
 import { initSessionMonitor, stopSessionMonitor } from './sessionMonitor.js';
@@ -51,6 +52,7 @@ if (fs.existsSync(publicDir) && publicDir !== clientDir) {
 // API Routes
 app.use('/api', directoriesRouter);
 app.use('/api', sessionsRouter);
+app.use('/api', hooksRouter);
 
 // SPA fallback route
 app.get('{*path}', (req, res, next) => {

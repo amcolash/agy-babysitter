@@ -23,6 +23,8 @@
     "session": "node src/cli.js",
     "cli:install": "./scripts/install-cli.sh",
     "cli:uninstall": "./scripts/uninstall-cli.sh",
+    "hooks:install": "./scripts/install-hooks.sh",
+    "hooks:uninstall": "./scripts/uninstall-hooks.sh",
     "service:install": "./systemd/install.sh",
     "service:uninstall": "./systemd/uninstall.sh"
   },

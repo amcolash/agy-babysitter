@@ -3,6 +3,7 @@ set -e
 
 BIN_DIR="${HOME}/.local/bin"
 CLI_TARGET="${BIN_DIR}/agyh"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "=== Uninstalling agyh CLI Helper ==="
 
@@ -12,3 +13,5 @@ if [ -L "${CLI_TARGET}" ] || [ -f "${CLI_TARGET}" ]; then
 else
   echo "agyh is not installed in ${BIN_DIR}."
 fi
+
+"${REPO_DIR}/scripts/uninstall-hooks.sh"

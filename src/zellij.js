@@ -201,7 +201,19 @@ export async function createSession({ name, command, cwd }) {
 
   const executable = isSystemdUser ? 'systemd-run' : 'zellij';
   const args = isSystemdUser
-    ? ['--user', '--scope', '--quiet', 'zellij', 'attach', '-b', sessionName]
+    ? [
+        '--user',
+        '--scope',
+        '--quiet',
+        '--property=Nice=0',
+        '--property=CPUSchedulingPolicy=other',
+        '--property=IOSchedulingClass=best-effort',
+        '--property=IOSchedulingPriority=4',
+        'zellij',
+        'attach',
+        '-b',
+        sessionName
+      ]
     : ['attach', '-b', sessionName];
 
   await execFileAsync(executable, args, {

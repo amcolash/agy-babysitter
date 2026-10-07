@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { attachToSession } from './ptyManager.js';
 import { touchWakelock } from './wakelock.js';
-import { markTurnStarted, clearNotification, getAllNotificationStates, feedSessionStream, onSessionDisconnected } from './sessionMonitor.js';
+import { markTurnStarted, clearNotification, getAllNotificationStates } from './sessionMonitor.js';
 
 /**
  * Sets up WebSocket server for terminal streaming and control actions
@@ -33,15 +33,12 @@ export function setupWebSocketServer(server) {
         rows
       });
 
-      // Stream PTY output to the browser WebSocket immediately
+      // Stream PTY output directly to browser WebSocket
       ptyProcess.onData((data) => {
         if (!isClosed && ws.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
         touchWakelock();
-        queueMicrotask(() => {
-          feedSessionStream(sessionName, data);
-        });
       });
 
       ptyProcess.onExit(({ exitCode, signal }) => {
@@ -95,9 +92,7 @@ export function setupWebSocketServer(server) {
                   }
                 });
               }
-            } catch (e) {
-              // Ignore resize errors when closing
-            }
+            } catch (e) {}
             return;
           } else if (payload.type === 'input') {
             ptyProcess.write(payload.data);
@@ -124,7 +119,6 @@ export function setupWebSocketServer(server) {
     const cleanup = () => {
       if (isClosed) return;
       isClosed = true;
-      onSessionDisconnected(sessionName);
       if (ptyProcess) {
         try {
           ptyProcess.kill();
@@ -186,3 +180,9 @@ export function broadcastServerRestart(wss, message = 'Server is restarting with
     }
   }
 }
+
+export default {
+  setupWebSocketServer,
+  setupAssetWatcher,
+  broadcastServerRestart
+};

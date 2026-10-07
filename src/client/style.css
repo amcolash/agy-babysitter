@@ -160,6 +160,11 @@ html, body {
   animation: pulse-dot 1.2s infinite ease-in-out;
 }
 
+.dot.paused {
+  background-color: #51afef;
+  box-shadow: 0 0 8px rgba(81, 175, 239, 0.6);
+}
+
 @keyframes pulse-dot {
   0% { opacity: 0.3; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.1); }

@@ -271,20 +271,29 @@ function updatePageTitle() {
  * Called on incoming terminal data
  */
 export function onTerminalDataReceived(data) {
-  const sessionName = getCurrentSession();
-  if (!sessionName) return;
-
-  // If ANSI bell character is encountered in data
-  if (typeof data === 'string' && data.includes('\x07')) {
-    handleServerSessionNotification(sessionName, 'input');
-  }
+  // Terminal data hook (server handles turn and prompt detection)
 }
 
 /**
- * Initialize global interaction listeners to unlock audio, track resize, & clear notifications on user action
+ * Initialize global interaction listeners to unlock audio, track resize, & clear notifications on any user action
  */
 export function initNotifications() {
-  const interactionEvents = ['click', 'keydown', 'touchstart'];
+  const interactionEvents = [
+    'click',
+    'mousedown',
+    'mouseup',
+    'mousemove',
+    'pointerdown',
+    'pointermove',
+    'keydown',
+    'keyup',
+    'touchstart',
+    'touchend',
+    'touchmove',
+    'wheel',
+    'focus'
+  ];
+
   interactionEvents.forEach((ev) => {
     window.addEventListener(ev, handleUserInteraction, { passive: true });
   });
@@ -293,7 +302,9 @@ export function initNotifications() {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      unlockAudio();
+      handleUserInteraction();
     }
   });
+
+  window.addEventListener('focus', handleUserInteraction, { passive: true });
 }
