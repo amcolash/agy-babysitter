@@ -1,7 +1,7 @@
 {
   "name": "agy-babysitter",
   "version": "1.0.0",
-  "description": "Remote web terminal babysitter for agy with zellij session persistence",
+  "description": "Remote web terminal babysitter for agy with session persistence",
   "main": "src/server.js",
   "bin": {
     "agyh": "./src/cli.js"
@@ -31,7 +31,7 @@
   "keywords": [
     "antigravity",
     "agy",
-    "zellij",
+    "tmux",
     "xterm",
     "babysitter"
   ],

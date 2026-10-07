@@ -23,7 +23,7 @@ if (import.meta.env.PROD) {
   registerSW({ immediate: true });
 }
 
-// Boot application data & initial zellij connection
+// Boot application data & initial session connection
 (async function boot() {
   await initInfo();
   await loadSessions();

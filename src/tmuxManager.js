@@ -105,7 +105,6 @@ export function applyTmuxGlobalOptions(sessionName) {
       execSync(`tmux set-option -t ${s} window-size latest 2>/dev/null || true`);
       execSync(`tmux set-option -t ${s} status off 2>/dev/null || true`);
       execSync(`tmux set-environment -t ${s} AGY_SESSION_NAME ${s} 2>/dev/null || true`);
-      execSync(`tmux set-environment -t ${s} ZELLIJ_SESSION_NAME ${s} 2>/dev/null || true`);
     }
   } catch (e) {}
 }
@@ -135,7 +134,7 @@ export function createSession({ name = config.DEFAULT_SESSION, cwd, command } = 
   // Create detached tmux session running the target command
   execSync(
     `tmux new-session -d -s ${JSON.stringify(sessionName)} -c ${JSON.stringify(targetCwd)} ${JSON.stringify(targetCommand)}`,
-    { env: { ...process.env, AGY_SESSION_NAME: sessionName, ZELLIJ_SESSION_NAME: sessionName } }
+    { env: { ...process.env, AGY_SESSION_NAME: sessionName } }
   );
 
   applyTmuxGlobalOptions(sessionName);
@@ -184,8 +183,7 @@ export function attachPtySession({ sessionName, cols = 100, rows = 30 }) {
       ...process.env,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      AGY_SESSION_NAME: name,
-      ZELLIJ_SESSION_NAME: name
+      AGY_SESSION_NAME: name
     }
   });
 

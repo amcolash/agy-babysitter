@@ -1,12 +1,14 @@
 # agy-babysitter ⚡
 
-A remote web babysitter and persistent terminal interface for [Antigravity](https://github.com/) (`agy`) with `zellij` session persistence, dynamic window resizing, interactive folder picker with scoped root directory tabs, automatic folder-based session naming, and mobile-friendly control actions.
+A remote web babysitter and persistent terminal interface for [Antigravity](https://github.com/) (`agy`) with tmux session persistence, native CLI helper (`agyh`), dynamic window resizing, interactive folder picker with scoped root directory tabs, automatic folder-based session naming, and mobile-friendly control actions.
 
 ---
 
 ## Features
 
-- 🔌 **Zellij Session Persistence**: Sessions stay alive on the host even if you close the browser, lose network connection, or switch devices.
+- 🔌 **Tmux Session Persistence**: Sessions stay alive 24/7 on the host under systemd even if you close the browser, lose network connection, or switch devices.
+- ⚡ **Zero-Lag Native CLI (`agyh`)**: Direct native terminal attachment in Kitty/Konsole with full TUI navigation and `Ctrl+b d` detach.
+- 🔔 **Deterministic Lifecycle Hooks**: Instant prompt detection and completion chimes via Antigravity's global hooks (`~/.gemini/config/hooks.json`).
 - 🏷️ **Smart Folder-Based Session Naming**:
   - Automatically names sessions after the directory folder they are started in.
   - Automatically hyphenates duplicate session names (`folder`, `folder-2`, `folder-3`, etc.).
@@ -15,8 +17,8 @@ A remote web babysitter and persistent terminal interface for [Antigravity](http
   - Restricts session starting directories to direct 1-level non-hidden subfolders within the allowed roots.
   - Interactive UI with root tabs (`📁 ~/Github`, `📁 ~/Dev`, `📁 ~/Desktop`), search filtering, and instant folder selection.
 - ❌ **Session Lifecycle Management**: Easily terminate/close sessions directly from the UI (`✕`) or CLI.
-- 📐 **Automatic Wrapping & Dynamic Resizing**: Syncs browser dimensions (`xterm.js` + `FitAddon`) to `node-pty` and `zellij` on the fly.
-- 🎮 **Babysitter Quick Actions**: Easy one-tap navigation controls with mobile-friendly floating speed dial (Escape, Up, Down, Enter).
+- 📐 **Automatic Wrapping & Dynamic Resizing**: Syncs browser dimensions (`xterm.js` + `FitAddon`) to `node-pty` and `tmux` on the fly.
+- 🎮 **Babysitter Quick Actions**: Easy one-tap navigation controls with mobile-friendly floating speed dial (Approve, Deny, Interrupt, Enter).
 - 🎨 **Doom One Color Theme**: Styled with the iconic Doom One dark palette (`#282c34`, `#21242b`, `#51afef`, `#98be65`, `#ff6c6b`, `#c678dd`, `#ECBE7B`).
 - ⚡ **Vite + Tailwind CSS v4**: Fully self-hosted without external CDN dependencies, fast production bundling, and instant HMR development.
 - 🔄 **Auto-Reconnect & Live Refresh**: Automatically attempts WebSocket reconnection every few seconds when disconnected, and auto-refreshes connected UI clients whenever frontend assets are changed.
@@ -48,7 +50,7 @@ DEFAULT_CWD=~/Github/my-project
 - `npm run deploy` - One-step build and restart (`npm run build && npm run restart`).
 - `npm run status` - Checks systemd service status.
 - `npm run logs` - Streams live journal logs from systemd.
-- `npm run session` - Attaches to (or creates) the default local zellij session.
+- `npm run session` - Launches the interactive `agyh` CLI selector.
 - `npm run service:install` - Installs, enables, and starts the systemd user service.
 - `npm run service:uninstall` - Disables and removes the systemd user service.
 

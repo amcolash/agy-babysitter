@@ -113,8 +113,7 @@ function attachSession(sessionName, cwd, command) {
     env: {
       ...process.env,
       TERM: process.env.TERM || 'xterm-256color',
-      AGY_SESSION_NAME: name,
-      ZELLIJ_SESSION_NAME: name
+      AGY_SESSION_NAME: name
     }
   });
 

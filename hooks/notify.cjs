@@ -22,7 +22,7 @@ process.stdin.on('end', () => {
 
   const event = process.argv[2] || 'unknown';
   const workspacePath = payload.workspacePaths && payload.workspacePaths.length > 0 ? payload.workspacePaths[0] : null;
-  const sessionName = process.env.AGY_SESSION_NAME || process.env.ZELLIJ_SESSION_NAME || (workspacePath ? path.basename(workspacePath) : null);
+  const sessionName = process.env.AGY_SESSION_NAME || process.env.TMUX_SESSION_NAME || (workspacePath ? path.basename(workspacePath) : null);
 
   const postData = JSON.stringify({
     event,

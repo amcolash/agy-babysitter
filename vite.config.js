@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'agy',
         short_name: 'agy',
-        description: 'Remote persistent web terminal babysitter for agy zellij sessions',
+        description: 'Remote persistent web terminal babysitter for agy sessions',
         start_url: '/',
         scope: '/',
         display: 'standalone',

@@ -113,7 +113,7 @@ export function initTerminal(onInput, onResize) {
   });
 
   // Intercept left-click mouse selection to simulate shiftKey=true for xterm.
-  // This allows native xterm text highlighting/selection while preserving Zellij's mouse reporting for wheel scrolling!
+  // This allows native xterm text highlighting/selection while preserving terminal mouse reporting for wheel scrolling!
   let isLeftDragging = false;
 
   terminalContainer.addEventListener(
@@ -243,7 +243,7 @@ export function initTerminal(onInput, onResize) {
 
         while (Math.abs(accumulatedTouchDelta) >= SWIPE_STEP_PX) {
           if (accumulatedTouchDelta > 0) {
-            // Swiping down -> scroll up in Zellij buffer (SGR Wheel Up)
+            // Swiping down -> scroll up in terminal buffer (SGR Wheel Up)
             accumulatedTouchDelta -= SWIPE_STEP_PX;
             if (onInput) onInput(`\x1b[<64;${col};${row}M`);
             term.scrollLines(-1);
