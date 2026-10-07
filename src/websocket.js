@@ -1,10 +1,9 @@
 import url from 'url';
-import path from 'path';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
-import { attachToSession } from './ptyManager.js';
 import { touchWakelock } from './wakelock.js';
+import { createOrGetSession, getSession } from './sessionManager.js';
 import { markTurnStarted, clearNotification, getAllNotificationStates } from './sessionMonitor.js';
 
 /**
@@ -20,39 +19,46 @@ export function setupWebSocketServer(server) {
 
     const parsedUrl = url.parse(req.url, true);
     const sessionName = parsedUrl.query.session || config.DEFAULT_SESSION;
-    const cols = parseInt(parsedUrl.query.cols, 10) || 80;
-    const rows = parseInt(parsedUrl.query.rows, 10) || 24;
+    const cols = parseInt(parsedUrl.query.cols, 10) || 100;
+    const rows = parseInt(parsedUrl.query.rows, 10) || 30;
 
-    let ptyProcess = null;
+    let session = null;
+    let clientObj = null;
     let isClosed = false;
 
     try {
-      ptyProcess = await attachToSession({
-        sessionName,
+      session = createOrGetSession({
+        name: sessionName,
         cols,
         rows
       });
 
-      // Stream PTY output directly to browser WebSocket
-      ptyProcess.onData((data) => {
-        if (!isClosed && ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
+      clientObj = {
+        type: 'ws',
+        send: (data) => {
+          if (!isClosed && ws.readyState === WebSocket.OPEN) {
+            ws.send(data);
+          }
+        },
+        close: () => {
+          if (!isClosed && ws.readyState === WebSocket.OPEN) {
+            ws.close(1000, 'Session closed');
+          }
         }
-        touchWakelock();
-      });
+      };
 
-      ptyProcess.onExit(({ exitCode, signal }) => {
-        if (!isClosed && ws.readyState === WebSocket.OPEN) {
-          const reason = `PTY exited (code: ${exitCode}, signal: ${signal})`.slice(0, 120);
-          ws.close(1000, reason);
-        }
-      });
+      session.addClient(clientObj);
+
+      // Immediately send existing terminal history buffer so the terminal paints instantly
+      const history = session.getHistory();
+      if (history && ws.readyState === WebSocket.OPEN) {
+        ws.send(history);
+      }
     } catch (err) {
       console.error('Failed to attach to session:', err);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(`\r\n\x1b[31m[Error attaching to session '${sessionName}': ${err.message}]\x1b[0m\r\n`);
-        const closeReason = (err.message || 'Error attaching to session').slice(0, 120);
-        ws.close(1011, closeReason);
+        ws.close(1011, (err.message || 'Error attaching').slice(0, 120));
       }
       return;
     }
@@ -70,7 +76,7 @@ export function setupWebSocketServer(server) {
     // Handle messages/actions coming from the browser
     ws.on('message', (message) => {
       touchWakelock();
-      if (!ptyProcess) return;
+      if (!session) return;
 
       const raw = message.toString();
 
@@ -79,30 +85,19 @@ export function setupWebSocketServer(server) {
         try {
           const payload = JSON.parse(raw);
           if (payload.type === 'resize' && payload.cols && payload.rows) {
-            try {
-              const newCols = Math.max(1, payload.cols);
-              const newRows = Math.max(1, payload.rows);
-              if (ptyProcess.cols !== newCols || ptyProcess.rows !== newRows) {
-                ptyProcess.resize(newCols, newRows);
-                // Notify other connected clients for this session about the resize reflow
-                const notice = JSON.stringify({ type: 'session_resized', session: sessionName });
-                wss.clients.forEach((client) => {
-                  if (client !== ws && client.readyState === WebSocket.OPEN && client.sessionName === sessionName) {
-                    client.send(notice);
-                  }
-                });
-              }
-            } catch (e) {}
+            const newCols = Math.max(20, payload.cols);
+            const newRows = Math.max(5, payload.rows);
+            session.resize(newCols, newRows);
             return;
           } else if (payload.type === 'input') {
-            ptyProcess.write(payload.data);
+            session.write(payload.data);
             return;
           } else if (payload.type === 'action') {
             markTurnStarted(sessionName);
-            if (payload.action === 'approve') ptyProcess.write('y\n');
-            else if (payload.action === 'deny') ptyProcess.write('n\n');
-            else if (payload.action === 'interrupt') ptyProcess.write('\x03');
-            else if (payload.action === 'enter') ptyProcess.write('\r');
+            if (payload.action === 'approve') session.write('y\n');
+            else if (payload.action === 'deny') session.write('n\n');
+            else if (payload.action === 'interrupt') session.write('\x03');
+            else if (payload.action === 'enter') session.write('\r');
             return;
           } else if (payload.type === 'clear_notification') {
             clearNotification(payload.session || sessionName);
@@ -113,17 +108,16 @@ export function setupWebSocketServer(server) {
         }
       }
 
-      ptyProcess.write(raw);
+      session.write(raw);
     });
 
     const cleanup = () => {
       if (isClosed) return;
       isClosed = true;
-      if (ptyProcess) {
-        try {
-          ptyProcess.kill();
-        } catch (e) {}
-        ptyProcess = null;
+      if (session && clientObj) {
+        session.removeClient(clientObj);
+        session = null;
+        clientObj = null;
       }
     };
 

@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import config, { resolveTilde } from '../config.js';
-import { listSessions, createSession, killSession, getUniqueSessionName } from '../zellij.js';
+import { listActiveSessions, createOrGetSession, terminateSession, getUniqueSessionName, hasSession } from '../sessionManager.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { touchWakelock, getWakelockStatus } from '../wakelock.js';
 import { getRecentSessions } from '../recentSessions.js';
@@ -24,17 +24,17 @@ router.get('/sessions/recent', async (req, res) => {
   }
 });
 
-// API: List active zellij sessions
+// API: List active sessions
 router.get('/sessions', async (req, res) => {
   try {
-    const sessions = await listSessions();
+    const sessions = listActiveSessions();
     res.json({ sessions });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// API: Create a new zellij session
+// API: Create a new session
 router.post('/sessions', async (req, res) => {
   try {
     const { name, command, cwd } = req.body;
@@ -47,18 +47,18 @@ router.post('/sessions', async (req, res) => {
     }
 
     const sessionName = name && name.trim() ? name.trim() : path.basename(sessionCwd);
-    const result = await createSession({ name: sessionName, command, cwd: sessionCwd });
+    const session = createOrGetSession({ name: sessionName, command, cwd: sessionCwd });
     touchWakelock(true);
-    res.json(result);
+    res.json({ name: session.name, created: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// API: Kill a zellij session
+// API: Kill a session
 router.delete('/sessions/:name', async (req, res) => {
   try {
-    const success = await killSession(req.params.name);
+    const success = terminateSession(req.params.name);
     touchWakelock(true);
     res.json({ success });
   } catch (err) {
@@ -70,7 +70,7 @@ router.delete('/sessions/:name', async (req, res) => {
 router.get('/suggest-session-name', async (req, res) => {
   try {
     const targetCwd = req.query.cwd ? resolveTilde(req.query.cwd.toString()) : config.DEFAULT_CWD;
-    const name = await getUniqueSessionName(targetCwd);
+    const name = getUniqueSessionName(targetCwd);
     res.json({ name });
   } catch (err) {
     res.status(500).json({ error: err.message });

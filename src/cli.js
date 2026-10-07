@@ -1,33 +1,23 @@
 #!/usr/bin/env node
-import { spawn, execSync } from 'child_process';
-import path from 'path';
+
+import net from 'net';
 import fs from 'fs';
+import path from 'path';
 import os from 'os';
 import readline from 'readline';
-import { fileURLToPath } from 'url';
-import config, { resolveTilde, formatDisplayPath } from './config.js';
-import {
-  listSessions,
-  createSession,
-  hasSession,
-  sanitizeSessionName,
-  wrapCommandWithColorEnv
-} from './zellij.js';
+import { execSync, spawn } from 'child_process';
+import config, { resolveTilde } from './config.js';
+import { getIpcSocketPath } from './ipcServer.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
-const distServerScript = path.join(rootDir, 'dist', 'server', 'server.js');
-const srcServerScript = path.join(__dirname, 'server.js');
-const serverScript = fs.existsSync(distServerScript) ? distServerScript : srcServerScript;
+// Ensure normal interactive scheduling for the CLI process
+try {
+  execSync(`chrt -o -p 0 ${process.pid} 2>/dev/null || true`);
+} catch (e) {}
 
 function isServerRunning() {
   try {
-    const stdout = execSync('pgrep -f "node.*server.js"', {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    });
-    return Boolean(stdout.trim());
+    const socketPath = getIpcSocketPath();
+    return fs.existsSync(socketPath);
   } catch (e) {
     return false;
   }
@@ -42,39 +32,19 @@ async function ensureServerRunning() {
       }).trim() === 'active';
   } catch (e) {}
 
-  if (isSystemdActive) {
+  if (isSystemdActive && isServerRunning()) {
     return true;
   }
 
   process.stdout.write('\x1b[38;2;81;175;239m➜\x1b[0m Starting agy-babysitter service...');
   try {
     execSync('systemctl --user start agy-babysitter.service 2>/dev/null', { stdio: 'ignore' });
-  } catch (e) {
-    if (!isServerRunning()) {
-      const proc = spawn(process.execPath, [serverScript], {
-        detached: true,
-        stdio: 'ignore',
-        cwd: rootDir
-      });
-      proc.unref();
-    }
-  }
+  } catch (e) {}
 
-  // Poll for up to 5 seconds until active
   const start = Date.now();
   while (Date.now() - start < 5000) {
-    try {
-      const active =
-        execSync('systemctl --user is-active agy-babysitter.service 2>/dev/null', {
-          encoding: 'utf8'
-        }).trim() === 'active';
-      if (active) {
-        process.stdout.write(' \x1b[38;2;152;190;101mactive!\x1b[0m\n');
-        return true;
-      }
-    } catch (e) {}
     if (isServerRunning()) {
-      process.stdout.write(' \x1b[38;2;152;190;101mrunning!\x1b[0m\n');
+      process.stdout.write(' \x1b[38;2;152;190;101mactive!\x1b[0m\n');
       return true;
     }
     await new Promise((r) => setTimeout(r, 200));
@@ -84,414 +54,227 @@ async function ensureServerRunning() {
   return true;
 }
 
-function attachSession(sessionName, cwd) {
-  const targetCwd = resolveTilde(cwd || config.DEFAULT_CWD);
-  const targetCommand = config.DEFAULT_COMMAND || 'agy';
-  const wrappedCommand = wrapCommandWithColorEnv(targetCommand);
-
-  if (!fs.existsSync(targetCwd)) {
-    fs.mkdirSync(targetCwd, { recursive: true });
-  }
-
-  process.stdout.write('\x1b[?25h'); // ensure cursor visible
-
-  let sessionExists = false;
-  try {
-    const listOut = execSync('zellij list-sessions -n 2>/dev/null', { encoding: 'utf8' });
-    sessionExists = listOut.split('\n').some((line) => line.split('[')[0]?.trim() === sessionName);
-  } catch (e) {}
-
-  if (!sessionExists) {
-    try {
-      execSync(`zellij attach -b ${sessionName}`, { cwd: targetCwd, stdio: 'ignore' });
-      if (targetCommand) {
-        setTimeout(() => {
-          try {
-            execSync(`zellij -s ${sessionName} action write-chars "${targetCommand}\n" 2>/dev/null || true`);
-          } catch (e) {}
-        }, 300);
-      }
-    } catch (e) {}
-  }
-
-  const zellij = spawn('zellij', ['attach', sessionName], {
-    cwd: targetCwd,
-    stdio: 'inherit'
-  });
-
-  zellij.on('exit', (code, signal) => {
-    process.exit(code ?? (signal ? 1 : 0));
-  });
-}
-
-function question(query) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  return new Promise((resolve) => {
-    rl.question(query, (ans) => {
-      rl.close();
-      resolve(ans.trim());
+function sendIpcRequest(payload) {
+  return new Promise((resolve, reject) => {
+    const socketPath = getIpcSocketPath();
+    const socket = net.createConnection(socketPath, () => {
+      socket.write(JSON.stringify(payload) + '\n');
     });
-  });
-}
 
-async function promptCreateSession() {
-  process.stdout.write('\n\x1b[1m\x1b[38;2;152;190;101mCreate New agy Session\x1b[0m\n');
-  process.stdout.write('\x1b[38;2;91;98;104m' + '─'.repeat(40) + '\x1b[0m\n');
-
-  const defaultDir = process.cwd();
-  const rawPath = await question(
-    `\x1b[38;2;81;175;239mDirectory path\x1b[0m [\x1b[38;2;91;98;104m${formatDisplayPath(defaultDir)}\x1b[0m]: `
-  );
-  const sessionCwd = rawPath ? resolveTilde(rawPath) : defaultDir;
-
-  const defaultName = sanitizeSessionName(path.basename(sessionCwd));
-  const rawName = await question(
-    `\x1b[38;2;81;175;239mSession name\x1b[0m [\x1b[38;2;91;98;104m${defaultName}\x1b[0m]: `
-  );
-  const sessionName = rawName ? sanitizeSessionName(rawName) : defaultName;
-
-  process.stdout.write(
-    `\n\x1b[38;2;81;175;239m➜\x1b[0m Launching session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
-  );
-
-  await createSession({ name: sessionName, cwd: sessionCwd });
-  attachSession(sessionName, sessionCwd);
-}
-
-function stopService() {
-  process.stdout.write('\n\x1b[38;2;255;108;107mStopping agy-babysitter service...\x1b[0m\n');
-  try {
-    execSync('systemctl --user stop agy-babysitter.service 2>/dev/null');
-  } catch (e) {}
-  try {
-    execSync('pkill -f "node.*server.js" 2>/dev/null');
-  } catch (e) {}
-  process.stdout.write('\x1b[38;2;152;190;101m✓ agy-babysitter service stopped.\x1b[0m\n\n');
-}
-
-function restartService() {
-  process.stdout.write('\n\x1b[38;2;236;190;123mRestarting agy-babysitter service...\x1b[0m\n');
-  try {
-    execSync('systemctl --user restart agy-babysitter.service', { stdio: 'inherit' });
-    process.stdout.write('\x1b[38;2;152;190;101m✓ Service restarted successfully.\x1b[0m\n\n');
-  } catch (e) {
-    console.error('Failed to restart service:', e.message);
-  }
-}
-
-function streamLogs() {
-  process.stdout.write('\x1b[?25h');
-  const journal = spawn('journalctl', ['--user', '-u', 'agy-babysitter', '-f', '-n', '50'], {
-    stdio: 'inherit'
-  });
-  journal.on('exit', () => process.exit(0));
-}
-
-async function showInteractiveMenu() {
-  await ensureServerRunning();
-  const sessions = await listSessions();
-
-  const items = [];
-  sessions.forEach((s) => {
-    items.push({
-      type: 'session',
-      name: s.name,
-      path: s.path || config.DEFAULT_CWD,
-      badge: s.name === config.DEFAULT_SESSION ? '(Default)' : ''
-    });
-  });
-
-  items.push({ type: 'create', key: '+', label: '+ Start new session...' });
-  items.push({ type: 'restart', key: 'r', label: '↻ Restart service' });
-  items.push({ type: 'stop', key: 's', label: '■ Stop service' });
-  items.push({ type: 'logs', key: 'l', label: '▤ Follow logs' });
-  items.push({ type: 'quit', key: 'q', label: '✕ Quit' });
-
-  let selectedIndex = 0;
-  let renderedLines = 0;
-
-  function render() {
-    if (renderedLines > 0) {
-      process.stdout.write(`\x1b[${renderedLines}A\x1b[0J`);
-    }
-
-    const lines = [];
-    lines.push(
-      '\x1b[1m\x1b[38;2;81;175;239magy-babysitter\x1b[0m \x1b[38;2;91;98;104m•\x1b[0m \x1b[38;2;223;223;223mActive Sessions\x1b[0m'
-    );
-    lines.push('\x1b[38;2;91;98;104m' + '─'.repeat(58) + '\x1b[0m');
-
-    items.forEach((item, idx) => {
-      const isSelected = idx === selectedIndex;
-      const pointer = isSelected ? '\x1b[38;2;81;175;239m❯\x1b[0m ' : '  ';
-
-      if (item.type === 'session') {
-        const num = `\x1b[38;2;91;98;104m[${idx + 1}]\x1b[0m`;
-        const nameColor = isSelected ? '\x1b[1m\x1b[38;2;81;175;239m' : '\x1b[38;2;223;223;223m';
-        const displayPath = `\x1b[38;2;91;98;104m${formatDisplayPath(item.path)}\x1b[0m`;
-        const badge = item.badge ? ` \x1b[38;2;152;190;101m${item.badge}\x1b[0m` : '';
-        lines.push(`${pointer}${num} ${nameColor}${item.name.padEnd(20)}\x1b[0m ${displayPath}${badge}`);
-      } else if (item.type === 'create') {
-        const keyTag = `\x1b[38;2;91;98;104m[+]\x1b[0m`;
-        const color = isSelected ? '\x1b[1m\x1b[38;2;152;190;101m' : '\x1b[38;2;152;190;101m';
-        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
-      } else if (item.type === 'restart') {
-        const keyTag = `\x1b[38;2;91;98;104m[r]\x1b[0m`;
-        const color = isSelected ? '\x1b[1m\x1b[38;2;236;190;123m' : '\x1b[38;2;236;190;123m';
-        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
-      } else if (item.type === 'stop') {
-        const keyTag = `\x1b[38;2;91;98;104m[s]\x1b[0m`;
-        const color = isSelected ? '\x1b[1m\x1b[38;2;255;108;107m' : '\x1b[38;2;255;108;107m';
-        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
-      } else if (item.type === 'logs') {
-        const keyTag = `\x1b[38;2;91;98;104m[l]\x1b[0m`;
-        const color = isSelected ? '\x1b[1m\x1b[38;2;70;217;255m' : '\x1b[38;2;70;217;255m';
-        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
-      } else if (item.type === 'quit') {
-        const keyTag = `\x1b[38;2;91;98;104m[q]\x1b[0m`;
-        const color = isSelected ? '\x1b[1m\x1b[38;2;91;98;104m' : '\x1b[38;2;91;98;104m';
-        lines.push(`${pointer}${keyTag} ${color}${item.label}\x1b[0m`);
+    let buffer = '';
+    socket.on('data', (chunk) => {
+      buffer += chunk.toString();
+      if (buffer.includes('\n')) {
+        try {
+          const res = JSON.parse(buffer.trim());
+          socket.end();
+          resolve(res);
+        } catch (e) {
+          socket.end();
+          resolve({ raw: buffer });
+        }
       }
     });
 
-    lines.push('\x1b[38;2;91;98;104m' + '─'.repeat(58) + '\x1b[0m');
-    lines.push(
-      '\x1b[38;2;91;98;104mUse ↑/↓ to navigate, Enter to select, 1-9 to jump, q to exit\x1b[0m'
+    socket.on('error', reject);
+  });
+}
+
+function attachIpcSession(sessionName, cwd, command) {
+  const socketPath = getIpcSocketPath();
+  const socket = net.createConnection(socketPath, () => {
+    const cols = process.stdout.columns || 120;
+    const rows = process.stdout.rows || 35;
+
+    // Send initial handshake
+    socket.write(
+      JSON.stringify({
+        action: 'attach',
+        session: sessionName,
+        cwd: cwd ? resolveTilde(cwd) : process.cwd(),
+        command: command || 'agy',
+        cols,
+        rows
+      }) + '\n'
     );
 
-    renderedLines = lines.length;
-    process.stdout.write(lines.join('\n') + '\n');
-  }
-
-  process.stdout.write('\x1b[?25l'); // hide cursor
-  render();
-
-  return new Promise((resolve) => {
-    readline.emitKeypressEvents(process.stdin);
+    // Put local terminal into raw streaming mode
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf-8');
+
+      process.stdin.on('data', (key) => {
+        // Ctrl+] to detach cleanly
+        if (key === '\x1d') {
+          process.stdout.write('\r\n\x1b[33m[Detached from session]\x1b[0m\r\n');
+          cleanupAndExit(0);
+          return;
+        }
+        socket.write(key);
+      });
     }
 
-    const cleanup = () => {
-      process.stdout.write('\x1b[?25h'); // show cursor
+    // Forward socket output straight to native terminal stdout with 0 latency
+    socket.on('data', (chunk) => {
+      process.stdout.write(chunk);
+    });
+
+    // Handle terminal resize events
+    const onResize = () => {
+      const newCols = process.stdout.columns;
+      const newRows = process.stdout.rows;
+      if (newCols && newRows) {
+        socket.write(`__AGYH_RESIZE__:${newCols},${newRows}`);
+      }
+    };
+    process.stdout.on('resize', onResize);
+  });
+
+  const cleanupAndExit = (code = 0) => {
+    try {
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(false);
       }
-      process.stdin.removeListener('keypress', onKeypress);
-    };
+      socket.end();
+    } catch (e) {}
+    process.exit(code);
+  };
 
-    const onKeypress = async (str, key) => {
-      if (!key) return;
+  socket.on('close', () => {
+    cleanupAndExit(0);
+  });
 
-      if (key.ctrl && key.name === 'c') {
-        cleanup();
-        process.exit(0);
-      }
-
-      if (key.name === 'up' || key.name === 'k') {
-        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-        render();
-        return;
-      }
-
-      if (key.name === 'down' || key.name === 'j') {
-        selectedIndex = (selectedIndex + 1) % items.length;
-        render();
-        return;
-      }
-
-      if (key.name === 'q' || key.name === 'escape') {
-        cleanup();
-        process.stdout.write('\n');
-        process.exit(0);
-      }
-
-      if (key.name === 'r' && !key.ctrl) {
-        cleanup();
-        restartService();
-        await showInteractiveMenu();
-        return;
-      }
-
-      if (key.name === 's' && !key.ctrl) {
-        cleanup();
-        stopService();
-        process.exit(0);
-      }
-
-      if (key.name === 'l' && !key.ctrl) {
-        cleanup();
-        streamLogs();
-        return;
-      }
-
-      if (str === '+' || key.name === 'n') {
-        cleanup();
-        await promptCreateSession();
-        return;
-      }
-
-      // Check number keys 1-9
-      const num = parseInt(str, 10);
-      if (!isNaN(num) && num >= 1 && num <= sessions.length) {
-        cleanup();
-        const target = items[num - 1];
-        process.stdout.write(`\n\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '${target.name}'...\n\n`);
-        attachSession(target.name, target.path);
-        return;
-      }
-
-      if (key.name === 'return' || key.name === 'enter') {
-        cleanup();
-        const selected = items[selectedIndex];
-
-        if (selected.type === 'session') {
-          process.stdout.write(
-            `\n\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${selected.name}\x1b[0m'...\n\n`
-          );
-          attachSession(selected.name, selected.path);
-        } else if (selected.type === 'create') {
-          await promptCreateSession();
-        } else if (selected.type === 'restart') {
-          restartService();
-          await showInteractiveMenu();
-        } else if (selected.type === 'stop') {
-          stopService();
-          process.exit(0);
-        } else if (selected.type === 'logs') {
-          streamLogs();
-        } else if (selected.type === 'quit') {
-          process.stdout.write('\n');
-          process.exit(0);
-        }
-        resolve();
-      }
-    };
-
-    process.stdin.on('keypress', onKeypress);
+  socket.on('error', (err) => {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    console.error(`\x1b[31mError connecting to session:\x1b[0m ${err.message}`);
+    process.exit(1);
   });
 }
 
-// Main CLI Entrypoint
-async function main() {
-  const args = process.argv.slice(2);
+async function handleInteractiveSelect() {
+  await ensureServerRunning();
+  try {
+    const res = await sendIpcRequest({ action: 'list' });
+    const sessions = res.sessions || [];
 
-  // Handle flags and subcommands
-  if (args.includes('-r') || args.includes('--restart') || args.includes('restart')) {
-    restartService();
-    return;
-  }
+    const currentFolder = path.basename(process.cwd());
 
-  if (args.includes('-k') || args.includes('--stop') || args.includes('stop')) {
-    stopService();
-    return;
-  }
-
-  if (args.includes('-s') || args.includes('--status') || args.includes('status')) {
-    try {
-      execSync('systemctl --user status agy-babysitter.service', { stdio: 'inherit' });
-    } catch (e) {}
-    return;
-  }
-
-  if (args.includes('-l') || args.includes('--logs') || args.includes('logs')) {
-    streamLogs();
-    return;
-  }
-
-  if (args.includes('-h') || args.includes('--help') || args.includes('help')) {
-    console.log(`
-\x1b[1m\x1b[38;2;81;175;239magyh\x1b[0m - Antigravity CLI Babysitter Helper
-
-\x1b[1mUSAGE:\x1b[0m
-  agyh                     Interactive TUI session selector
-  agyh <path>              Open/create session for directory path (e.g. agyh ~/Github/my-repo)
-  agyh <session-name>      Attach to or create named session
-  agyh -r, --restart       Restart agy-babysitter systemd service
-  agyh -k, --stop          Stop agy-babysitter systemd service
-  agyh -s, --status        Check systemd service status
-  agyh -l, --logs          Follow service journal logs
-  agyh -h, --help          Show this help message
-`);
-    return;
-  }
-
-  // If a path or session name was passed as argument
-  if (args.length > 0 && args[0] && !args[0].startsWith('-')) {
-    await ensureServerRunning();
-    const target = args[0];
-    const resolvedPath = resolveTilde(target);
-
-    // Case 1: Target is an existing directory path
-    if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
-      const targetCwd = resolvedPath;
-      const sessions = await listSessions();
-
-      // Check if a session already exists pointing to this exact path
-      const existingForPath = sessions.find((s) => s.path === targetCwd);
-      if (existingForPath) {
-        process.stdout.write(
-          `\x1b[38;2;81;175;239m➜\x1b[0m Found active session '\x1b[1m${existingForPath.name}\x1b[0m' for \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m. Attaching...\n\n`
-        );
-        attachSession(existingForPath.name, targetCwd);
-        return;
-      }
-
-      // Check if a session with basename exists
-      const baseName = sanitizeSessionName(path.basename(targetCwd));
-      const existingByName = sessions.find((s) => s.name === baseName);
-      if (existingByName) {
-        process.stdout.write(
-          `\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${existingByName.name}\x1b[0m'...\n\n`
-        );
-        attachSession(existingByName.name, targetCwd);
-        return;
-      }
-
-      // Create new session for this path
-      process.stdout.write(
-        `\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${baseName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m...\n\n`
-      );
-      await createSession({ name: baseName, cwd: targetCwd });
-      attachSession(baseName, targetCwd);
+    // If a session matching current directory exists, attach directly
+    const match = sessions.find((s) => s.name === currentFolder);
+    if (match) {
+      console.log(`Attaching to existing session '${match.name}'... (Press Ctrl+] to detach)`);
+      attachIpcSession(match.name, match.cwd);
       return;
     }
 
-    // Case 2: Target is a session name
-    const sessionName = sanitizeSessionName(target);
-    const sessions = await listSessions();
-    const existing = sessions.find((s) => s.name === sessionName);
-    const sessionCwd = existing?.path || process.cwd();
-
-    if (existing) {
-      process.stdout.write(`\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${sessionName}\x1b[0m'...\n\n`);
-      attachSession(sessionName, sessionCwd);
+    if (sessions.length === 0) {
+      console.log(`Creating and attaching to session '${currentFolder}'... (Press Ctrl+] to detach)`);
+      attachIpcSession(currentFolder, process.cwd());
       return;
     }
 
-    // New named session
-    process.stdout.write(
-      `\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
-    );
-    await createSession({ name: sessionName, cwd: sessionCwd });
-    attachSession(sessionName, sessionCwd);
-    return;
-  }
+    console.log('\n\x1b[1mActive agy-babysitter Sessions:\x1b[0m');
+    sessions.forEach((s, idx) => {
+      console.log(`  \x1b[36m${idx + 1})\x1b[0m \x1b[1m${s.name}\x1b[0m (${s.cwd})`);
+    });
+    console.log(`  \x1b[32m+)\x1b[0m Create new session for current directory (\x1b[1m${currentFolder}\x1b[0m)\n`);
 
-  // No arguments: Interactive TUI Menu
-  if (process.stdin.isTTY) {
-    await showInteractiveMenu();
-  } else {
-    // Non-interactive fallback: attach to default session
-    await ensureServerRunning();
-    attachSession(config.DEFAULT_SESSION, config.DEFAULT_CWD);
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    rl.question('Select a session number or press ENTER for current directory: ', (ans) => {
+      rl.close();
+      const choice = ans.trim();
+      if (!choice || choice === '+') {
+        attachIpcSession(currentFolder, process.cwd());
+        return;
+      }
+
+      const num = parseInt(choice, 10);
+      if (!isNaN(num) && num >= 1 && num <= sessions.length) {
+        const target = sessions[num - 1];
+        attachIpcSession(target.name, target.cwd);
+        return;
+      }
+
+      // Check if typed name directly
+      const byName = sessions.find((s) => s.name === choice);
+      if (byName) {
+        attachIpcSession(byName.name, byName.cwd);
+      } else {
+        attachIpcSession(choice, process.cwd());
+      }
+    });
+  } catch (err) {
+    console.error('Failed to communicate with daemon:', err.message);
   }
 }
 
-main().catch((err) => {
-  console.error('Error in agyh:', err);
-  process.exit(1);
-});
+// CLI Command Router
+const args = process.argv.slice(2);
+const command = args[0];
+
+if (!command || command === 'attach') {
+  const sessionArg = args[1];
+  if (sessionArg) {
+    ensureServerRunning().then(() => {
+      attachIpcSession(sessionArg);
+    });
+  } else {
+    handleInteractiveSelect();
+  }
+} else if (command === 'list' || command === 'ls') {
+  ensureServerRunning().then(async () => {
+    const res = await sendIpcRequest({ action: 'list' });
+    const sessions = res.sessions || [];
+    if (sessions.length === 0) {
+      console.log('No active sessions.');
+    } else {
+      console.log('\x1b[1mActive Sessions:\x1b[0m');
+      sessions.forEach((s) => {
+        console.log(`  - \x1b[36m${s.name}\x1b[0m (cwd: ${s.cwd}, clients: ${s.clientCount})`);
+      });
+    }
+  });
+} else if (command === 'kill') {
+  const sessionArg = args[1];
+  if (!sessionArg) {
+    console.error('Usage: agyh kill <session-name>');
+    process.exit(1);
+  }
+  ensureServerRunning().then(async () => {
+    const res = await sendIpcRequest({ action: 'kill', session: sessionArg });
+    console.log(res.ok ? `✓ Terminated session '${sessionArg}'` : `Session '${sessionArg}' not found`);
+  });
+} else if (command === 'status') {
+  try {
+    execSync('systemctl --user status agy-babysitter.service', { stdio: 'inherit' });
+  } catch (e) {}
+} else if (command === 'logs') {
+  try {
+    execSync('journalctl --user -u agy-babysitter -f', { stdio: 'inherit' });
+  } catch (e) {}
+} else if (command === 'web') {
+  console.log(`agy-babysitter web dashboard: http://${config.HOST || '0.0.0.0'}:${config.PORT || 8080}`);
+} else {
+  console.log(`
+\x1b[1magyh\x1b[0m - Native CLI helper for agy-babysitter
+
+\x1b[1mUsage:\x1b[0m
+  agyh                  Select or attach to a session for the current folder
+  agyh attach <name>    Attach to a specific session
+  agyh list             List all active background sessions
+  agyh kill <name>      Terminate a background session
+  agyh web              Print Web UI URL
+  agyh status           Show systemd service status
+  agyh logs             View live daemon logs
+
+\x1b[1mShortcut:\x1b[0m
+  Press \x1b[33mCtrl+]\x1b[0m inside any session to detach without closing it.
+`);
+}
