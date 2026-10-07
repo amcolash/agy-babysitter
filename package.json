@@ -35,8 +35,8 @@
     "xterm",
     "babysitter"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Andrew McOlash <amcolash@gmail.com>",
+  "license": "MIT",
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
