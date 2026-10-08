@@ -88,8 +88,38 @@
         </div>
       </div>
 
-      <!-- Drawer Footer: Connection Info -->
-      <div class="p-3 bg-[#1b2229]/70 border-t border-[#3f444a] flex items-center justify-between">
+        <!-- Drawer Quota Monitor Section -->
+        <div id="drawer-quota-container" class="hidden flex flex-col gap-2 p-3 bg-[#1b2229] border-t border-[#3f444a]">
+          <div class="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-[#5B6268]">
+            <span>Usage & Quota</span>
+            <span id="drawer-quota-model" class="text-xs text-[#51afef] font-mono lowercase truncate max-w-[150px]"></span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Daily Left -->
+            <div class="flex flex-col gap-1.5 p-2 rounded-lg bg-[#21242b] border border-[#3f444a]">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-[#bbc2cf]">Daily Left</span>
+                <span id="drawer-daily-text" class="text-xs font-bold text-[#98be65] font-mono">--%</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-[#1b2229] border border-[#3f444a] overflow-hidden">
+                <div id="drawer-daily-bar" class="h-full rounded-full bg-[#98be65] transition-all duration-300" style="width: 0%;"></div>
+              </div>
+            </div>
+            <!-- Quota 7d -->
+            <div class="flex flex-col gap-1.5 p-2 rounded-lg bg-[#21242b] border border-[#3f444a]">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-[#bbc2cf]">Weekly 7d</span>
+                <span id="drawer-7d-text" class="text-xs font-bold text-[#98be65] font-mono">--%</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-[#1b2229] border border-[#3f444a] overflow-hidden">
+                <div id="drawer-7d-bar" class="h-full rounded-full bg-[#98be65] transition-all duration-300" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drawer Footer: Connection Info -->
+        <div class="p-3 bg-[#1b2229]/70 border-t border-[#3f444a] flex items-center justify-between">
         <div
           title="Connection Status"
           class="connection-status-box flex items-center gap-2 text-xs font-medium cursor-default"
@@ -170,11 +200,36 @@
             </button>
           </div>
 
-          <!-- Right: Status indicator & Settings / Reload Controls -->
-          <div class="flex items-center gap-1.5 px-2 md:px-2.5 my-auto flex-shrink-0">
-            <div class="hidden md:flex items-center gap-1.5 text-[11px] text-[#5B6268] select-none mr-1">
+          <!-- Right: Quota Monitors + Status indicator & Settings / Reload Controls -->
+          <div class="flex items-center gap-1.5 sm:gap-2 px-2 md:px-2.5 my-auto flex-shrink-0">
+            <!-- Quota Progress Widgets (Desktop & Tablet) -->
+            <div id="quota-widgets-header" class="hidden sm:flex items-center gap-3 pr-2.5 border-r border-[#3f444a]/60 select-none">
+              <!-- Daily Left Monitor -->
+              <div id="quota-daily-widget" class="flex items-center gap-1.5 text-xs font-mono cursor-default" title="Daily Allowance Left">
+                <span class="text-[#5B6268] font-bold text-xs uppercase tracking-wider">Daily</span>
+                <div class="w-12 h-2 rounded-full bg-[#1b2229] border border-[#3f444a] overflow-hidden flex">
+                  <div id="quota-daily-bar" class="h-full rounded-full transition-all duration-300 bg-[#98be65]" style="width: 0%;"></div>
+                </div>
+                <span id="quota-daily-text" class="font-bold text-[#98be65] min-w-[42px] text-right font-mono text-xs">--%</span>
+              </div>
+
+              <!-- Quota 7d Monitor -->
+              <div id="quota-7d-widget" class="flex items-center gap-1.5 text-xs font-mono cursor-default" title="Weekly Quota Used">
+                <span class="text-[#5B6268] font-bold text-xs uppercase tracking-wider">7d</span>
+                <div class="w-12 h-2 rounded-full bg-[#1b2229] border border-[#3f444a] overflow-hidden flex">
+                  <div id="quota-7d-bar" class="h-full rounded-full transition-all duration-300 bg-[#98be65]" style="width: 0%;"></div>
+                </div>
+                <span id="quota-7d-text" class="font-bold text-[#98be65] min-w-[42px] text-right font-mono text-xs">--%</span>
+                <span id="quota-7d-reset" class="text-xs text-[#5B6268] font-mono hidden md:inline truncate max-w-[90px]"></span>
+              </div>
+            </div>
+
+            <!-- Minimal Connection Status Indicator -->
+            <div
+              title="Connection Status"
+              class="connection-status-box flex items-center justify-center p-1 cursor-default"
+            >
               <span class="dot connected status-dot"></span>
-              <span class="status-text truncate max-w-[120px]">Connected</span>
             </div>
             <button
               id="btn-open-settings"

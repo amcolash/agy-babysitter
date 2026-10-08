@@ -6,6 +6,7 @@ import { initInputModal } from './inputModal.js';
 import { initActions } from './actions.js';
 import { initNotifications } from './notifications.js';
 import { initSettings } from './settings.js';
+import { initQuota } from './quota.js';
 
 import { registerSW } from 'virtual:pwa-register';
 
@@ -26,5 +27,6 @@ if (import.meta.env.PROD) {
 // Boot application data & initial session connection
 (async function boot() {
   await initInfo();
+  await initQuota();
   await loadSessions();
 })();

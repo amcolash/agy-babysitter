@@ -59,6 +59,25 @@ export function checkSessionChanges() {
 }
 
 /**
+ * Broadcasts quota updates to all connected browser WebSockets
+ * @param {Object} quota
+ */
+export function broadcastQuota(quota) {
+  if (!wssInstance || !quota) return;
+  const msg = JSON.stringify({
+    type: 'quota_changed',
+    quota
+  });
+  wssInstance.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(msg);
+      } catch (e) {}
+    }
+  });
+}
+
+/**
  * Broadcasts notification state changes to all connected browser WebSockets
  * @param {string} session
  * @param {'settled'|'input'|null} state
@@ -180,6 +199,7 @@ export default {
   stopSessionMonitor,
   broadcastSessionsList,
   checkSessionChanges,
+  broadcastQuota,
   handleLifecycleHookEvent,
   markTurnStarted,
   clearNotification,

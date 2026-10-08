@@ -2,6 +2,7 @@ import url from 'url';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
+import { getQuota } from './quotaManager.js';
 import { attachPtySession, listSessions, hasSession } from './tmuxManager.js';
 import { markTurnStarted, clearNotification, getAllNotificationStates, broadcastSessionsList } from './sessionMonitor.js';
 
@@ -126,7 +127,7 @@ export function setupWebSocketServer(server) {
       attachToSession(initialSession, cols, rows);
     }
 
-    // Always send active sessions list and notification states to newly connected client
+    // Always send active sessions list, notification states, and quota to newly connected client
     try {
       const currentSessions = listSessions();
       ws.send(JSON.stringify({ type: 'sessions_changed', sessions: currentSessions }));
@@ -134,6 +135,11 @@ export function setupWebSocketServer(server) {
       const initialStates = getAllNotificationStates();
       if (initialStates && Object.keys(initialStates).length > 0) {
         ws.send(JSON.stringify({ type: 'session_notifications_sync', states: initialStates }));
+      }
+
+      const initialQuota = getQuota();
+      if (initialQuota) {
+        ws.send(JSON.stringify({ type: 'quota_sync', quota: initialQuota }));
       }
     } catch (e) {}
 

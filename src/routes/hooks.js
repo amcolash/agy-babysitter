@@ -1,5 +1,6 @@
 import express from 'express';
-import { handleLifecycleHookEvent } from '../sessionMonitor.js';
+import { handleLifecycleHookEvent, broadcastQuota } from '../sessionMonitor.js';
+import { saveQuota } from '../quotaManager.js';
 
 const router = express.Router();
 
@@ -8,8 +9,12 @@ const router = express.Router();
  */
 router.post('/hook/notify', (req, res) => {
   try {
-    const { event, session, conversationId, toolCall } = req.body || {};
+    const { event, session, conversationId, toolCall, payload } = req.body || {};
     handleLifecycleHookEvent({ event, session, conversationId, toolCall });
+    if (req.body?.quota || payload?.quota) {
+      const saved = saveQuota(req.body.quota ? req.body : payload);
+      if (saved) broadcastQuota(saved);
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

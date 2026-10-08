@@ -1,6 +1,7 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice } from './terminal.js';
 import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized, handleServerSessionNotification, handleServerSessionNotificationsSync } from './notifications.js';
 import { handleServerSessionsChanged, loadSessions } from './sessions.js';
+import { handleServerQuota } from './quota.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -298,6 +299,9 @@ export function connectTerminal(sessionName) {
           return;
         } else if (payload.type === 'session_notifications_sync') {
           handleServerSessionNotificationsSync(payload.states);
+          return;
+        } else if (payload.type === 'quota_changed' || payload.type === 'quota_sync') {
+          handleServerQuota(payload.quota);
           return;
         }
       } catch (e) {}

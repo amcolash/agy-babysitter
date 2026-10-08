@@ -7,6 +7,7 @@ import config from './config.js';
 import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
 import hooksRouter from './routes/hooks.js';
+import quotaRouter from './routes/quota.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
 import { stopAllWakelocks } from './wakelock.js';
 import { initSessionMonitor, stopSessionMonitor } from './sessionMonitor.js';
@@ -41,7 +42,7 @@ const clientDir = findClientDir();
 const publicDir = path.resolve(process.cwd(), 'public');
 
 // Middlewares & static files
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 if (fs.existsSync(clientDir)) {
   app.use(express.static(clientDir));
 }
@@ -53,6 +54,7 @@ if (fs.existsSync(publicDir) && publicDir !== clientDir) {
 app.use('/api', directoriesRouter);
 app.use('/api', sessionsRouter);
 app.use('/api', hooksRouter);
+app.use('/api', quotaRouter);
 
 // SPA fallback route
 app.get('{*path}', (req, res, next) => {
