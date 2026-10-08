@@ -5,6 +5,7 @@ import { listSessions, createSession, terminateSession, getUniqueSessionName, ha
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { getWakelockStatus } from '../wakelock.js';
 import { getRecentSessions } from '../recentSessions.js';
+import { broadcastSessionsList } from '../sessionMonitor.js';
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ router.post('/sessions', async (req, res) => {
 
     const sessionName = name && name.trim() ? name.trim() : path.basename(sessionCwd);
     const session = createSession({ name: sessionName, command, cwd: sessionCwd });
+    broadcastSessionsList();
     res.json({ name: session.name, created: session.created });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -58,6 +60,7 @@ router.post('/sessions', async (req, res) => {
 router.delete('/sessions/:name', async (req, res) => {
   try {
     const success = terminateSession(req.params.name);
+    broadcastSessionsList();
     res.json({ success });
   } catch (err) {
     res.status(500).json({ error: err.message });

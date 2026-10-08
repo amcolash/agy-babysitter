@@ -1,9 +1,62 @@
 import { WebSocket } from 'ws';
 import { touchWakelock } from './wakelock.js';
+import { listSessions } from './tmuxManager.js';
 
 // Stores notification state per session: Map<sessionName, 'settled' | 'input' | null>
 const sessionStates = new Map();
 let wssInstance = null;
+let monitorInterval = null;
+let lastSessionsHash = '';
+
+function getSessionsSignature(sessions) {
+  return sessions.map((s) => `${s.name}:${s.cwd}`).sort().join('|');
+}
+
+/**
+ * Broadcasts the current list of active tmux sessions to all connected WebSocket clients
+ * @param {Array} [sessions]
+ */
+export function broadcastSessionsList(sessions = null) {
+  if (!wssInstance) return;
+  const currentSessions = sessions || listSessions();
+  const signature = getSessionsSignature(currentSessions);
+  lastSessionsHash = signature;
+
+  // Prune notification states for sessions that no longer exist
+  const activeNames = new Set(currentSessions.map((s) => s.name));
+  for (const name of sessionStates.keys()) {
+    if (!activeNames.has(name)) {
+      sessionStates.delete(name);
+    }
+  }
+
+  const msg = JSON.stringify({
+    type: 'sessions_changed',
+    sessions: currentSessions
+  });
+
+  wssInstance.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(msg);
+      } catch (e) {}
+    }
+  });
+}
+
+/**
+ * Checks if tmux session list changed and broadcasts update if so
+ */
+export function checkSessionChanges() {
+  if (!wssInstance || wssInstance.clients.size === 0) return;
+  try {
+    const currentSessions = listSessions();
+    const signature = getSessionsSignature(currentSessions);
+    if (signature !== lastSessionsHash) {
+      broadcastSessionsList(currentSessions);
+    }
+  } catch (e) {}
+}
 
 /**
  * Broadcasts notification state changes to all connected browser WebSockets
@@ -93,17 +146,31 @@ export function getAllNotificationStates() {
 }
 
 /**
- * Initialize the session monitor with the WebSocket server instance
+ * Initialize the session monitor with the WebSocket server instance and periodic polling
  * @param {import('ws').WebSocketServer} wss
  */
 export function initSessionMonitor(wss) {
   wssInstance = wss;
+  try {
+    const initialSessions = listSessions();
+    lastSessionsHash = getSessionsSignature(initialSessions);
+  } catch (e) {}
+
+  if (monitorInterval) {
+    clearInterval(monitorInterval);
+  }
+  // Check tmux sessions every 1000ms to detect external creations/terminations/exits
+  monitorInterval = setInterval(checkSessionChanges, 1000);
 }
 
 /**
- * Stops session monitor
+ * Stops session monitor and polling timer
  */
 export function stopSessionMonitor() {
+  if (monitorInterval) {
+    clearInterval(monitorInterval);
+    monitorInterval = null;
+  }
   sessionStates.clear();
   wssInstance = null;
 }
@@ -111,6 +178,8 @@ export function stopSessionMonitor() {
 export default {
   initSessionMonitor,
   stopSessionMonitor,
+  broadcastSessionsList,
+  checkSessionChanges,
   handleLifecycleHookEvent,
   markTurnStarted,
   clearNotification,

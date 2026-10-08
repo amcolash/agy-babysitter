@@ -168,6 +168,24 @@ export function getSessionNotification(sessionName) {
   return s ? s.notified : null;
 }
 
+export function pruneSessionNotifications(validSessionNames) {
+  if (!Array.isArray(validSessionNames)) return;
+  const valid = new Set(validSessionNames);
+  let changed = false;
+  for (const name of sessionStates.keys()) {
+    if (!valid.has(name)) {
+      sessionStates.delete(name);
+      changed = true;
+    }
+  }
+  if (changed) {
+    updatePageTitle();
+    if (onNotificationChangeCallback) {
+      onNotificationChangeCallback(null, null);
+    }
+  }
+}
+
 export function clearSessionNotification(sessionName) {
   if (!sessionName) return;
   const s = sessionStates.get(sessionName);

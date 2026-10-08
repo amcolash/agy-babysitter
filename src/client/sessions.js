@@ -1,9 +1,9 @@
 import { writeTerminal, term, isMobileDevice } from './terminal.js';
-import { connectTerminal, disconnectTerminal, getCurrentSession, setCurrentSession, clearReconnectTimer, hideDisconnectedOverlay } from './socket.js';
+import { connectTerminal, disconnectTerminal, getCurrentSession, setCurrentSession, clearReconnectTimer, hideDisconnectedOverlay, updateStatus } from './socket.js';
 import { showToast } from './toast.js';
 import { openModal } from './modal.js';
 import { safeFetchJson } from './api.js';
-import { getSessionNotification, clearSessionNotification, setNotificationChangeCallback } from './notifications.js';
+import { getSessionNotification, clearSessionNotification, setNotificationChangeCallback, pruneSessionNotifications } from './notifications.js';
 
 const btnOpenDrawer = document.getElementById('btn-open-drawer');
 const btnCloseDrawer = document.getElementById('btn-close-drawer');
@@ -75,12 +75,10 @@ export function syncSessionToStorageAndUrl(sessionName) {
 
 export function switchToSession(sessionName) {
   if (!sessionName) return;
-  if (sessionName !== getCurrentSession()) {
-    clearReconnectTimer();
-    syncSessionToStorageAndUrl(sessionName);
-    connectTerminal(sessionName);
-    renderSessions();
-  }
+  clearReconnectTimer();
+  syncSessionToStorageAndUrl(sessionName);
+  connectTerminal(sessionName);
+  renderSessions();
 }
 
 export function switchRelativeSession(direction) {
@@ -381,10 +379,64 @@ export function renderSessions() {
   updateSessionTabIcons();
 }
 
+export function handleServerSessionsChanged(sessions) {
+  activeSessionsList = Array.isArray(sessions) ? sessions : [];
+  pruneSessionNotifications(activeSessionsList.map((s) => s.name));
+
+  if (drawerSessionCount) {
+    drawerSessionCount.textContent = String(activeSessionsList.length);
+  }
+
+  const hasSessions = activeSessionsList.length > 0;
+  updateEmptyState(hasSessions);
+
+  const current = getCurrentSession();
+
+  if (!hasSessions) {
+    if (current) {
+      writeTerminal(`\r\n\x1b[33m[No active sessions remaining]\x1b[0m\r\n`);
+      disconnectTerminal();
+      clearSessionFromStorageAndUrl();
+    }
+    updateStatus('disconnected', 'No active sessions');
+    renderSessions();
+    return;
+  }
+
+  // If a session is currently active
+  if (current) {
+    const isCurrentStillActive = activeSessionsList.some((s) => s.name === current);
+    if (!isCurrentStillActive) {
+      // Current session was closed/terminated
+      showToast(`Session '${current}' ended`, 'info');
+      writeTerminal(`\r\n\x1b[33m[Session '${current}' ended]\x1b[0m\r\n`);
+
+      // Switch to first available session
+      const nextSession = activeSessionsList[0].name;
+      clearReconnectTimer();
+      syncSessionToStorageAndUrl(nextSession);
+      connectTerminal(nextSession);
+    }
+  } else {
+    // Was in no-session state, but now sessions exist
+    const savedSession = localStorage.getItem('agy_selected_session');
+    let target =
+      savedSession && activeSessionsList.some((s) => s.name === savedSession)
+        ? savedSession
+        : activeSessionsList[0].name;
+    syncSessionToStorageAndUrl(target);
+    connectTerminal(target);
+  }
+
+  renderSessions();
+}
+
 export async function loadSessions(selectSessionName = null, autoConnect = true) {
   try {
     const data = await safeFetchJson('/api/sessions');
-    activeSessionsList = data.sessions || [];
+    const sessions = data.sessions || [];
+    activeSessionsList = sessions;
+    pruneSessionNotifications(sessions.map((s) => s.name));
 
     if (drawerSessionCount) {
       drawerSessionCount.textContent = String(activeSessionsList.length);
@@ -398,6 +450,9 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
       disconnectTerminal();
       updateStatus('disconnected', 'No active sessions');
       renderSessions();
+      if (autoConnect) {
+        connectTerminal(null);
+      }
       return;
     }
 

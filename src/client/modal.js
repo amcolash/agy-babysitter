@@ -1,5 +1,5 @@
 import { connectTerminal } from './socket.js';
-import { loadSessions, computeUniqueSessionName, getActiveSessions } from './sessions.js';
+import { loadSessions, computeUniqueSessionName, getActiveSessions, switchToSession } from './sessions.js';
 import { showToast } from './toast.js';
 import { safeFetchJson } from './api.js';
 
@@ -277,7 +277,7 @@ export function initModal() {
       loadRecentSessions();
       showToast(`Created session '${data.name || name}'`, 'success');
       await loadSessions(data.name || name);
-      connectTerminal(data.name || name);
+      switchToSession(data.name || name);
     } catch (err) {
       showToast(`Error: ${err.message}`, 'error');
     }

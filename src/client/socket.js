@@ -1,5 +1,6 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice } from './terminal.js';
 import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized, handleServerSessionNotification, handleServerSessionNotificationsSync } from './notifications.js';
+import { handleServerSessionsChanged, loadSessions } from './sessions.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -117,17 +118,13 @@ export function clearReconnectTimer() {
 export function disconnectTerminal() {
   clearReconnectTimer();
   clearDisconnectedOverlayTimer();
-  if (ws) {
-    const oldWs = ws;
-    ws = null;
-    oldWs.onclose = null;
-    oldWs.onerror = null;
+  currentSession = null;
+  if (ws && ws.readyState === WebSocket.OPEN) {
     try {
-      oldWs.close();
+      ws.send(JSON.stringify({ type: 'detach' }));
     } catch (e) {}
   }
-  currentSession = null;
-  updateStatus('disconnected', 'Disconnected');
+  updateStatus('disconnected', 'No active sessions');
   hideDisconnectedOverlay();
 }
 
@@ -160,15 +157,13 @@ if (typeof window !== 'undefined') {
 
   window.addEventListener('online', () => {
     updateStatus('connecting', 'Network restored - connecting...');
-    if (currentSession) {
-      connectTerminal(currentSession);
-    }
+    connectTerminal(currentSession);
   });
 
   // Reconnect if connection was dropped while tab was in background
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      if (!isSocketConnected() && currentSession) {
+      if (!isSocketConnected()) {
         connectTerminal(currentSession);
       }
     }
@@ -178,7 +173,6 @@ if (typeof window !== 'undefined') {
 export function scheduleReconnect(sessionName) {
   if (reconnectTimer) return;
   const targetSession = sessionName || currentSession;
-  if (!targetSession) return;
 
   if (isServerUpdating) {
     updateStatus('connecting', 'Reconnecting...');
@@ -187,20 +181,45 @@ export function scheduleReconnect(sessionName) {
     return;
   }
 
-  updateStatus('connecting', `Reconnecting (${targetSession})...`);
+  updateStatus('connecting', targetSession ? `Reconnecting (${targetSession})...` : 'Reconnecting...');
   // Delay full screen overlay for 5 seconds so brief server restarts happen completely seamlessly without flashing
   scheduleDisconnectedOverlay('Connecting to Server...', 'Looks like you are disconnected from the server. Attempting to reconnect...', 5000);
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    if (currentSession) {
-      connectTerminal(currentSession);
-    }
+    connectTerminal(currentSession);
   }, 1200);
 }
 
 export function connectTerminal(sessionName) {
   clearReconnectTimer();
+
+  currentSession = sessionName || null;
+  if (sessionName) {
+    onSessionConnected(sessionName);
+    updateStatus('connecting', `Connecting (${sessionName})...`);
+  } else {
+    updateStatus('disconnected', 'No active sessions');
+  }
+
+  try {
+    fitAddon.fit();
+  } catch (e) {}
+  const cols = term.cols || 80;
+  const rows = term.rows || 24;
+
+  // If existing WebSocket connection is already open, reuse it dynamically!
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    if (sessionName) {
+      ws.send(JSON.stringify({ type: 'attach', session: sessionName, cols, rows }));
+      updateStatus('connected', `Connected (${sessionName})`);
+      if (!isMobileDevice()) term.focus();
+      setTimeout(handleTerminalResize, 100);
+    } else {
+      ws.send(JSON.stringify({ type: 'detach' }));
+    }
+    return;
+  }
 
   if (ws) {
     const oldWs = ws;
@@ -212,18 +231,9 @@ export function connectTerminal(sessionName) {
     } catch (e) {}
   }
 
-  currentSession = sessionName;
-  onSessionConnected(sessionName);
-  updateStatus('connecting', `Connecting (${sessionName})...`);
-
-  try {
-    fitAddon.fit();
-  } catch (e) {}
-  const cols = term.cols || 80;
-  const rows = term.rows || 24;
-
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${location.host}/ws?session=${encodeURIComponent(sessionName)}&cols=${cols}&rows=${rows}`;
+  const query = sessionName ? `?session=${encodeURIComponent(sessionName)}&cols=${cols}&rows=${rows}` : '';
+  const wsUrl = `${protocol}//${location.host}/ws${query}`;
 
   const socket = new WebSocket(wsUrl);
   ws = socket;
@@ -239,9 +249,13 @@ export function connectTerminal(sessionName) {
     }
 
     hideDisconnectedOverlay();
-    updateStatus('connected', `Connected (${sessionName})`);
-    if (!isMobileDevice()) term.focus();
-    setTimeout(handleTerminalResize, 100);
+    if (currentSession) {
+      updateStatus('connected', `Connected (${currentSession})`);
+      if (!isMobileDevice()) term.focus();
+      setTimeout(handleTerminalResize, 100);
+    } else {
+      updateStatus('disconnected', 'No active sessions');
+    }
   };
 
   socket.onmessage = (event) => {
@@ -260,8 +274,24 @@ export function connectTerminal(sessionName) {
           showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...');
           startPollingServerOnline();
           return;
+        } else if (payload.type === 'session_attached') {
+          hideDisconnectedOverlay();
+          updateStatus('connected', `Connected (${payload.session})`);
+          if (!isMobileDevice()) term.focus();
+          setTimeout(handleTerminalResize, 100);
+          return;
+        } else if (payload.type === 'session_detached') {
+          // Handled gracefully via sessions_changed broadcast
+          return;
+        } else if (payload.type === 'session_attach_error') {
+          console.warn(`[Socket] Attach error: ${payload.error}`);
+          loadSessions();
+          return;
         } else if (payload.type === 'session_resized') {
           onTerminalResized();
+          return;
+        } else if (payload.type === 'sessions_changed' || payload.type === 'sessions_sync') {
+          handleServerSessionsChanged(payload.sessions);
           return;
         } else if (payload.type === 'session_notification') {
           handleServerSessionNotification(payload.session, payload.state);
@@ -277,14 +307,14 @@ export function connectTerminal(sessionName) {
     onTerminalDataReceived(event.data);
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     if (ws !== socket) return;
-    scheduleReconnect(sessionName);
+    scheduleReconnect(currentSession);
   };
 
   socket.onerror = () => {
     if (ws !== socket) return;
-    scheduleReconnect(sessionName);
+    scheduleReconnect(currentSession);
   };
 }
 
