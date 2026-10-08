@@ -25,7 +25,9 @@ export function isAllowedDirectory(targetPath) {
 
   for (const allowedRoot of config.ALLOWED_DIRECTORIES) {
     const resolvedRoot = resolveTilde(allowedRoot);
-    // Direct 1-level child only (not the root itself)
+    if (resolved === resolvedRoot) {
+      return true;
+    }
     const parent = path.dirname(resolved);
     if (parent === resolvedRoot) {
       return true;

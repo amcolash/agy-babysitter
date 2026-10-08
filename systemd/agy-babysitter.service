@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=%h/Github/agy-babysitter
 Environment=NODE_ENV=production
+Environment="PATH=%h/.gemini/antigravity-cli/bin:%h/.local/bin:%h/.local/share/mise/shims:%h/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/usr/bin/env node dist/server/server.js
 KillMode=process
 CPUSchedulingPolicy=other

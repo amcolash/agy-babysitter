@@ -3,8 +3,56 @@ import os from 'os';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
+import { execSync } from 'child_process';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+export function getAugmentedPath() {
+  const existingPaths = (process.env.PATH || '').split(':').filter(Boolean);
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, '.gemini', 'antigravity-cli', 'bin'),
+    path.join(home, '.local', 'bin'),
+    path.join(home, '.local', 'share', 'mise', 'shims'),
+    path.join(home, '.local', 'share', 'mise', 'installs', 'node', 'latest', 'bin'),
+    '/home/linuxbrew/.linuxbrew/bin',
+    '/home/linuxbrew/.linuxbrew/sbin',
+    path.join(home, '.cargo', 'bin'),
+    path.join(home, '.nix-profile', 'bin'),
+    '/nix/var/nix/profiles/default/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/local/sbin',
+    '/usr/sbin',
+    '/sbin'
+  ];
+
+  try {
+    const sysEnv = execSync('systemctl --user show-environment 2>/dev/null', { encoding: 'utf8' });
+    for (const line of sysEnv.split('\n')) {
+      if (line.startsWith('PATH=')) {
+        const pList = line.slice(5).split(':').filter(Boolean);
+        candidates.unshift(...pList);
+        break;
+      }
+    }
+  } catch (e) {}
+
+  const merged = [];
+  const seen = new Set();
+  for (const dir of [...candidates, ...existingPaths]) {
+    if (!seen.has(dir) && fs.existsSync(dir)) {
+      seen.add(dir);
+      merged.push(dir);
+    }
+  }
+  return merged.join(':');
+}
+
+export const AUGMENTED_PATH = getAugmentedPath();
+process.env.PATH = AUGMENTED_PATH;
 
 const envCandidates = [
   path.resolve(process.cwd(), '.env'),

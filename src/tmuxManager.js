@@ -2,7 +2,7 @@ import { execSync, spawn } from 'child_process';
 import pty from 'node-pty';
 import path from 'path';
 import fs from 'fs';
-import config, { resolveTilde } from './config.js';
+import config, { resolveTilde, AUGMENTED_PATH } from './config.js';
 import { addRecentSession } from './recentSessions.js';
 
 export function sanitizeSessionName(name) {
@@ -18,7 +18,7 @@ export function listSessions() {
   try {
     const output = execSync(
       'tmux list-sessions -F "#{session_name}\t#{session_path}\t#{session_attached}\t#{session_created}" 2>/dev/null',
-      { encoding: 'utf-8' }
+      { encoding: 'utf-8', env: { ...process.env, PATH: AUGMENTED_PATH } }
     );
     return output
       .trim()
@@ -46,7 +46,9 @@ export function listSessions() {
 export function hasSession(name) {
   if (!name) return false;
   try {
-    execSync(`tmux has-session -t ${JSON.stringify(sanitizeSessionName(name))} 2>/dev/null`);
+    execSync(`tmux has-session -t ${JSON.stringify(sanitizeSessionName(name))} 2>/dev/null`, {
+      env: { ...process.env, PATH: AUGMENTED_PATH }
+    });
     return true;
   } catch (e) {
     return false;
@@ -85,26 +87,29 @@ export function getUniqueSessionName(cwdOrName) {
  */
 export function applyTmuxGlobalOptions(sessionName) {
   try {
-    execSync('tmux set-option -s escape-time 0 2>/dev/null || true');
+    const opts = { env: { ...process.env, PATH: AUGMENTED_PATH } };
+    execSync('tmux set-option -s escape-time 0 2>/dev/null || true', opts);
+    execSync(`tmux set-environment -g PATH ${JSON.stringify(AUGMENTED_PATH)} 2>/dev/null || true`, opts);
     // Disable right-click menus so the terminal emulator's native context menu works cleanly
-    execSync('tmux unbind-key -n MouseDown3Pane 2>/dev/null || true');
-    execSync('tmux unbind-key -n M-MouseDown3Pane 2>/dev/null || true');
-    execSync('tmux unbind-key -n MouseDown3Status 2>/dev/null || true');
-    execSync('tmux unbind-key -n M-MouseDown3Status 2>/dev/null || true');
-    execSync('tmux unbind-key -n MouseDown3StatusLeft 2>/dev/null || true');
-    execSync('tmux unbind-key -n M-MouseDown3StatusLeft 2>/dev/null || true');
-    execSync('tmux unbind-key -n MouseDown3StatusRight 2>/dev/null || true');
-    execSync('tmux unbind-key -n M-MouseDown3StatusRight 2>/dev/null || true');
-    execSync('tmux unbind-key -T copy-mode MouseDown3Pane 2>/dev/null || true');
-    execSync('tmux unbind-key -T copy-mode-vi MouseDown3Pane 2>/dev/null || true');
+    execSync('tmux unbind-key -n MouseDown3Pane 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n M-MouseDown3Pane 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n MouseDown3Status 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n M-MouseDown3Status 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n MouseDown3StatusLeft 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n M-MouseDown3StatusLeft 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n MouseDown3StatusRight 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -n M-MouseDown3StatusRight 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -T copy-mode MouseDown3Pane 2>/dev/null || true', opts);
+    execSync('tmux unbind-key -T copy-mode-vi MouseDown3Pane 2>/dev/null || true', opts);
 
     if (sessionName) {
       const s = JSON.stringify(sessionName);
-      execSync(`tmux set-option -t ${s} history-limit 50000 2>/dev/null || true`);
-      execSync(`tmux set-option -t ${s} mouse on 2>/dev/null || true`);
-      execSync(`tmux set-option -t ${s} window-size latest 2>/dev/null || true`);
-      execSync(`tmux set-option -t ${s} status off 2>/dev/null || true`);
-      execSync(`tmux set-environment -t ${s} AGY_SESSION_NAME ${s} 2>/dev/null || true`);
+      execSync(`tmux set-option -t ${s} history-limit 50000 2>/dev/null || true`, opts);
+      execSync(`tmux set-option -t ${s} mouse on 2>/dev/null || true`, opts);
+      execSync(`tmux set-option -t ${s} window-size latest 2>/dev/null || true`, opts);
+      execSync(`tmux set-option -t ${s} status off 2>/dev/null || true`, opts);
+      execSync(`tmux set-environment -t ${s} AGY_SESSION_NAME ${s} 2>/dev/null || true`, opts);
+      execSync(`tmux set-environment -t ${s} PATH ${JSON.stringify(AUGMENTED_PATH)} 2>/dev/null || true`, opts);
     }
   } catch (e) {}
 }
@@ -131,13 +136,27 @@ export function createSession({ name = config.DEFAULT_SESSION, cwd, command } = 
     return { name: sessionName, cwd: targetCwd, created: false };
   }
 
+  // Ensure global tmux PATH is configured
+  applyTmuxGlobalOptions();
+
   // Create detached tmux session running the target command
   execSync(
     `tmux new-session -d -s ${JSON.stringify(sessionName)} -c ${JSON.stringify(targetCwd)} ${JSON.stringify(targetCommand)}`,
-    { env: { ...process.env, AGY_SESSION_NAME: sessionName } }
+    {
+      env: {
+        ...process.env,
+        PATH: AUGMENTED_PATH,
+        AGY_SESSION_NAME: sessionName
+      }
+    }
   );
 
   applyTmuxGlobalOptions(sessionName);
+
+  if (!hasSession(sessionName)) {
+    throw new Error(`Failed to create session '${sessionName}': tmux session terminated immediately.`);
+  }
+
   addRecentSession(sessionName, targetCwd);
 
   return { name: sessionName, cwd: targetCwd, created: true };
@@ -154,7 +173,9 @@ export function terminateSession(name) {
     return false;
   }
   try {
-    execSync(`tmux kill-session -t ${JSON.stringify(sessionName)} 2>/dev/null`);
+    execSync(`tmux kill-session -t ${JSON.stringify(sessionName)} 2>/dev/null`, {
+      env: { ...process.env, PATH: AUGMENTED_PATH }
+    });
     return true;
   } catch (e) {
     return false;
@@ -172,8 +193,10 @@ export function attachPtySession({ sessionName, cols = 100, rows = 30 }) {
   const name = sanitizeSessionName(sessionName);
 
   if (!hasSession(name)) {
-    createSession({ name });
+    throw new Error(`Session '${name}' not found`);
   }
+
+  applyTmuxGlobalOptions(name);
 
   const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', name], {
     name: 'xterm-256color',
@@ -181,6 +204,7 @@ export function attachPtySession({ sessionName, cols = 100, rows = 30 }) {
     rows: Math.max(5, rows || 30),
     env: {
       ...process.env,
+      PATH: AUGMENTED_PATH,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       AGY_SESSION_NAME: name
