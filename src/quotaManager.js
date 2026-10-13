@@ -75,42 +75,163 @@ export function parseQuotaPayload(rawPayload) {
     };
 
     // Calculate Daily Left: 100% = 1 full day of baseline allowance (1/7th weekly quota)
-    if (qwk.reset_time && qwk.reset_time !== 'null') {
-      const resetEpoch = Math.floor(new Date(qwk.reset_time).getTime() / 1000);
-      if (!isNaN(resetEpoch)) {
-        const nowEpoch = Math.floor(Date.now() / 1000);
-        let diff = resetEpoch - nowEpoch;
-        if (diff < 0) diff = 0;
-        if (diff > 604800) diff = 604800;
+    result.dailyLeft = calculateDailyLeft(qwk);
+  }
 
-        const elapsed = 604800 - diff;
-        let dayNum = Math.floor(elapsed / 86400) + 1;
-        if (dayNum > 7) dayNum = 7;
-        if (dayNum < 1) dayNum = 1;
+  return result;
+}
 
-        const usedFraction = 1 - qwk.remaining_fraction;
-        const usedDays = usedFraction * 7;
-        let dailyLeftDays = dayNum - usedDays;
-        const totalRemDays = qwk.remaining_fraction * 7;
-        if (dailyLeftDays > totalRemDays) dailyLeftDays = totalRemDays;
+export function calculateDailyLeft(qwk, atTimestamp = Date.now()) {
+  if (!qwk || typeof qwk.remaining_fraction !== 'number' || !qwk.reset_time || qwk.reset_time === 'null') {
+    return null;
+  }
+  const resetEpoch = Math.floor(new Date(qwk.reset_time).getTime() / 1000);
+  if (isNaN(resetEpoch)) return null;
 
-        const dailyPct = dailyLeftDays * 100;
-        result.dailyLeft = {
-          percentage: parseFloat(dailyPct.toFixed(2)),
-          remainingDays: parseFloat(dailyLeftDays.toFixed(2))
-        };
-      }
+  const nowEpoch = Math.floor(atTimestamp / 1000);
+  let diff = resetEpoch - nowEpoch;
+  if (diff < 0) diff = 0;
+  if (diff > 604800) diff = 604800;
+
+  const elapsed = 604800 - diff;
+  let dayNum = Math.floor(elapsed / 86400) + 1;
+  if (dayNum > 7) dayNum = 7;
+  if (dayNum < 1) dayNum = 1;
+
+  const usedFraction = 1 - qwk.remaining_fraction;
+  const usedDays = usedFraction * 7;
+  let dailyLeftDays = dayNum - usedDays;
+  const totalRemDays = qwk.remaining_fraction * 7;
+  if (dailyLeftDays > totalRemDays) dailyLeftDays = totalRemDays;
+
+  const dailyPct = dailyLeftDays * 100;
+  return {
+    percentage: parseFloat(dailyPct.toFixed(2)),
+    remainingDays: parseFloat(dailyLeftDays.toFixed(2)),
+    dayNum
+  };
+}
+
+export function mergeQuota(current, incoming) {
+  if (!current) return incoming;
+  if (!incoming) return current;
+
+  const is3pPool = (id) => /claude|anthropic|3p/.test((id || '').toLowerCase());
+  const currentIs3p = is3pPool(current.modelId);
+  const incomingIs3p = is3pPool(incoming.modelId);
+
+  // If switching between different model pools (Gemini vs Claude), accept incoming
+  if (currentIs3p !== incomingIs3p) {
+    return incoming;
+  }
+
+  const result = {
+    model: incoming.model || current.model,
+    modelId: incoming.modelId || current.modelId,
+    contextWindowUsed: incoming.contextWindowUsed ?? current.contextWindowUsed,
+    dailyLeft: null,
+    quota7d: null,
+    quota5h: null,
+    updatedAt: Date.now()
+  };
+
+  // 1. Quota 7d: Monotonically decrease remaining (or increase used) unless reset window changed/refreshed
+  if (current.quota7d && incoming.quota7d) {
+    const currentReset7d = current.quota7d.resetTime ? new Date(current.quota7d.resetTime).getTime() : NaN;
+    const incomingReset7d = incoming.quota7d.resetTime ? new Date(incoming.quota7d.resetTime).getTime() : NaN;
+
+    if (!isNaN(incomingReset7d) && !isNaN(currentReset7d) && incomingReset7d > currentReset7d) {
+      // New weekly cycle detected
+      result.quota7d = incoming.quota7d;
+    } else if (!isNaN(incomingReset7d) && !isNaN(currentReset7d) && incomingReset7d < currentReset7d) {
+      // Stale weekly cycle from an older window
+      result.quota7d = current.quota7d;
+    } else {
+      // Same cycle: prevent higher remaining / lower usage
+      const remainingFraction = Math.min(current.quota7d.remainingFraction, incoming.quota7d.remainingFraction);
+      const usedPct = Math.max(0, Math.min(100, (1 - remainingFraction) * 100));
+      result.quota7d = {
+        usedPercentage: parseFloat(usedPct.toFixed(2)),
+        remainingFraction,
+        resetTime: current.quota7d.resetTime || incoming.quota7d.resetTime,
+        resetRelative: formatRelativeTime(current.quota7d.resetTime || incoming.quota7d.resetTime)
+      };
     }
+  } else {
+    result.quota7d = incoming.quota7d || current.quota7d;
+  }
+
+  // 2. Daily Left: Monotonically decrease remaining allowance unless quota refreshed or calendar day rolled over
+  if (result.quota7d) {
+    const recomputedDaily = calculateDailyLeft(
+      {
+        remaining_fraction: result.quota7d.remainingFraction,
+        reset_time: result.quota7d.resetTime
+      },
+      Date.now()
+    );
+
+    if (recomputedDaily) {
+      result.dailyLeft = recomputedDaily;
+
+      if (current.dailyLeft) {
+        const currentReset7d = current.quota7d?.resetTime ? new Date(current.quota7d.resetTime).getTime() : NaN;
+        const incomingReset7d = incoming.quota7d?.resetTime ? new Date(incoming.quota7d.resetTime).getTime() : NaN;
+        const weeklyRefreshed = !isNaN(incomingReset7d) && !isNaN(currentReset7d) && incomingReset7d > currentReset7d;
+
+        const currentDayNum = current.dailyLeft.dayNum ?? (current.quota7d ? calculateDailyLeft({ remaining_fraction: current.quota7d.remainingFraction, reset_time: current.quota7d.resetTime }, current.updatedAt || Date.now())?.dayNum : null);
+        const dayRefreshed = currentDayNum != null && recomputedDaily.dayNum > currentDayNum;
+
+        // If neither the weekly cycle nor the daily baseline rolled over, enforce monotonicity:
+        if (!weeklyRefreshed && !dayRefreshed) {
+          result.dailyLeft.percentage = Math.min(current.dailyLeft.percentage, recomputedDaily.percentage);
+          result.dailyLeft.remainingDays = Math.min(current.dailyLeft.remainingDays, recomputedDaily.remainingDays);
+        }
+      }
+    } else {
+      result.dailyLeft = incoming.dailyLeft || current.dailyLeft;
+    }
+  } else {
+    result.dailyLeft = incoming.dailyLeft || current.dailyLeft;
+  }
+
+  // 3. Quota 5h: Monotonically decrease remaining unless 5h reset window advanced
+  if (current.quota5h && incoming.quota5h) {
+    const currentReset5h = current.quota5h.resetTime ? new Date(current.quota5h.resetTime).getTime() : NaN;
+    const incomingReset5h = incoming.quota5h.resetTime ? new Date(incoming.quota5h.resetTime).getTime() : NaN;
+
+    if (!isNaN(incomingReset5h) && !isNaN(currentReset5h) && incomingReset5h > currentReset5h) {
+      // 5h window rolled over into the future
+      result.quota5h = incoming.quota5h;
+    } else if (!isNaN(incomingReset5h) && !isNaN(currentReset5h) && incomingReset5h < currentReset5h) {
+      // Stale 5h window
+      result.quota5h = current.quota5h;
+    } else {
+      // Same 5h window
+      const remainingFraction = Math.min(current.quota5h.remainingFraction, incoming.quota5h.remainingFraction);
+      const usedPct = Math.max(0, Math.min(100, (1 - remainingFraction) * 100));
+      result.quota5h = {
+        usedPercentage: parseFloat(usedPct.toFixed(2)),
+        remainingFraction,
+        resetTime: current.quota5h.resetTime || incoming.quota5h.resetTime,
+        resetRelative: formatRelativeTime(current.quota5h.resetTime || incoming.quota5h.resetTime)
+      };
+    }
+  } else {
+    result.quota5h = incoming.quota5h || current.quota5h;
   }
 
   return result;
 }
 
 export function saveQuota(payload) {
-  const parsed = parseQuotaPayload(payload);
-  if (!parsed) return null;
+  const incoming = parseQuotaPayload(payload);
+  if (!incoming) return null;
 
-  cachedQuota = parsed;
+  const current = cachedQuota || getQuota();
+  const merged = mergeQuota(current, incoming);
+
+  cachedQuota = merged;
 
   try {
     const dir = path.dirname(QUOTA_CACHE_FILE);
@@ -160,6 +281,8 @@ export function onQuotaChange(listener) {
 
 export default {
   parseQuotaPayload,
+  calculateDailyLeft,
+  mergeQuota,
   saveQuota,
   getQuota,
   onQuotaChange,
