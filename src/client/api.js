@@ -9,7 +9,11 @@ import { showDisconnectedOverlay, isServerUpdatingState, startPollingServerOnlin
  */
 export async function safeFetchJson(url, options = {}) {
   try {
-    const res = await fetch(url, options);
+    const fetchOptions = {
+      credentials: 'include',
+      ...options,
+    };
+    const res = await fetch(url, fetchOptions);
 
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {

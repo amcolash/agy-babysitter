@@ -11,8 +11,36 @@ const btnFabDown = document.getElementById('btn-fab-down');
 const btnFabEnter = document.getElementById('btn-fab-enter');
 
 let isFabOpen = false;
+let isFabDisabled = true;
+
+export function isFabDisabledState() {
+  return isFabDisabled;
+}
+
+export function setFabDisabled(disabled) {
+  isFabDisabled = Boolean(disabled);
+  if (isFabDisabled) {
+    toggleFabMenu(false);
+    if (btnFab) {
+      btnFab.disabled = true;
+      btnFab.classList.add('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+    }
+    if (fabContainer) {
+      fabContainer.classList.add('pointer-events-none');
+    }
+  } else {
+    if (btnFab) {
+      btnFab.disabled = false;
+      btnFab.classList.remove('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+    }
+    if (fabContainer) {
+      fabContainer.classList.remove('pointer-events-none');
+    }
+  }
+}
 
 export function toggleFabMenu(forceState = null) {
+  if (isFabDisabled && forceState !== false) return;
   isFabOpen = forceState !== null ? forceState : !isFabOpen;
   if (!fabMenu || !btnFab) return;
 
@@ -30,6 +58,7 @@ export function initActions() {
   if (btnFab) {
     btnFab.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isFabDisabled) return;
       toggleFabMenu();
     });
   }
@@ -45,6 +74,7 @@ export function initActions() {
   if (btnFabInput) {
     btnFabInput.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isFabDisabled) return;
       toggleFabMenu(false);
       openInputModal();
     });
@@ -53,6 +83,7 @@ export function initActions() {
   if (btnFabEsc) {
     btnFabEsc.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isFabDisabled) return;
       sendInput('\x1b');
     });
   }
@@ -60,6 +91,7 @@ export function initActions() {
   if (btnFabUp) {
     btnFabUp.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isFabDisabled) return;
       sendInput('\x1b[A');
     });
   }
@@ -67,6 +99,7 @@ export function initActions() {
   if (btnFabDown) {
     btnFabDown.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isFabDisabled) return;
       sendInput('\x1b[B');
     });
   }
@@ -74,6 +107,7 @@ export function initActions() {
   if (btnFabEnter) {
     btnFabEnter.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isFabDisabled) return;
       sendAction('enter');
     });
   }

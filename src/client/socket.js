@@ -1,7 +1,9 @@
-import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice } from './terminal.js';
+import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice, setTerminalInputEnabled } from './terminal.js';
 import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized, handleServerSessionNotification, handleServerSessionNotificationsSync } from './notifications.js';
 import { handleServerSessionsChanged, loadSessions } from './sessions.js';
 import { handleServerQuota } from './quota.js';
+import { setFabDisabled } from './actions.js';
+import { setInputModalEnabled } from './inputModal.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -60,6 +62,30 @@ export function showDisconnectedOverlay(title, subtitle) {
   if (disconnectSubtitle && subtitle) disconnectSubtitle.textContent = subtitle;
 
   disconnectedOverlay.classList.remove('hidden');
+  updateStatus('disconnected', title || 'Connecting to Server...');
+
+  setFabDisabled(true);
+  setTerminalInputEnabled(false);
+  setInputModalEnabled(false);
+
+  // On mobile, ensure session badge/list and drawer are hidden when disconnected overlay is shown
+  const mobileHeader = document.getElementById('mobile-session-header');
+  const headerSessionBadge = document.getElementById('header-session-badge');
+  if (mobileHeader) {
+    mobileHeader.classList.add('hidden');
+    mobileHeader.classList.remove('flex');
+  }
+  if (headerSessionBadge) {
+    headerSessionBadge.classList.add('hidden');
+  }
+  const sessionsDrawer = document.getElementById('sessions-drawer');
+  const drawerBackdrop = document.getElementById('drawer-backdrop');
+  if (sessionsDrawer) {
+    sessionsDrawer.classList.remove('open');
+  }
+  if (drawerBackdrop) {
+    drawerBackdrop.classList.remove('open');
+  }
 }
 
 export function scheduleDisconnectedOverlay(title, subtitle, delayMs = DISCONNECT_OVERLAY_DELAY_MS) {
@@ -82,9 +108,22 @@ export function hideDisconnectedOverlay() {
   if (disconnectedOverlay) {
     disconnectedOverlay.classList.add('hidden');
   }
+  const mobileHeader = document.getElementById('mobile-session-header');
+  const headerSessionBadge = document.getElementById('header-session-badge');
+  if (currentSession) {
+    if (mobileHeader) {
+      mobileHeader.classList.remove('hidden');
+      mobileHeader.classList.add('flex');
+    }
+    if (headerSessionBadge) {
+      headerSessionBadge.classList.remove('hidden');
+    }
+  }
 }
 
 export function updateStatus(state, message) {
+  const isConnected = state === 'connected';
+
   const dots = document.querySelectorAll('.status-dot');
   dots.forEach((dot) => {
     dot.className = `dot ${state} status-dot`;
@@ -99,6 +138,10 @@ export function updateStatus(state, message) {
   boxes.forEach((box) => {
     box.title = message;
   });
+
+  setFabDisabled(!isConnected);
+  setTerminalInputEnabled(isConnected);
+  setInputModalEnabled(isConnected);
 }
 
 export function getCurrentSession() {
@@ -135,7 +178,7 @@ export function startPollingServerOnline() {
 
   const checkOnline = async () => {
     try {
-      const res = await fetch('/api/sessions', { cache: 'no-store' });
+      const res = await fetch('/api/sessions', { cache: 'no-store', credentials: 'include' });
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         console.log('[Recovery] Server is back online, reloading page...');
@@ -329,7 +372,7 @@ export function sendClearNotification(sessionName) {
 }
 
 export function sendInput(data) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN && currentSession) {
     ws.send(JSON.stringify({ type: 'input', data }));
   }
 }
@@ -341,9 +384,9 @@ export function sendResize(cols, rows) {
 }
 
 export function sendAction(action) {
-  handleUserInteraction();
-  markTurnStarted();
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN && currentSession) {
+    handleUserInteraction();
+    markTurnStarted();
     ws.send(JSON.stringify({ type: 'action', action }));
   }
 }

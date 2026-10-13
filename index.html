@@ -35,7 +35,7 @@
 
     <aside
       id="sessions-drawer"
-      class="md:hidden fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] bg-[#21242b] border-r border-[#3f444a] rounded-r-2xl shadow-2xl z-50 flex flex-col justify-between overflow-hidden"
+      class="md:hidden fixed inset-y-0 left-0 -translate-x-full w-72 sm:w-80 max-w-[85vw] bg-[#21242b] border-r border-[#3f444a] rounded-r-2xl shadow-2xl z-50 flex flex-col justify-between overflow-hidden"
       aria-label="Sessions Menu"
     >
       <!-- Drawer Header -->
@@ -163,15 +163,15 @@
           class="flex items-stretch justify-between bg-[#21242b] border-b border-[#3f444a] px-2 md:px-0 py-1.5 md:py-0 select-none flex-shrink-0 backdrop-blur-md min-w-0 h-11 sm:h-9"
         >
           <!-- Mobile View: Active Session Tab Capsule (hidden on desktop) -->
-          <div class="flex md:hidden items-center gap-2 min-w-0 my-auto">
+          <div id="mobile-session-header" class="hidden md:hidden items-center gap-2 min-w-0 my-auto">
             <!-- Active Session Tab Capsule -->
             <button
               id="header-session-badge"
               type="button"
               title="Click to switch sessions"
-              class="group flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef]/60 text-xs text-[#DFDFDF] transition shadow-xs cursor-pointer max-w-[200px] sm:max-w-[320px] min-w-0"
+              class="hidden group flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef]/60 text-xs text-[#DFDFDF] transition shadow-xs cursor-pointer max-w-[200px] sm:max-w-[320px] min-w-0"
             >
-              <span id="header-status-dot" class="dot connected status-dot flex-shrink-0"></span>
+              <span id="header-status-dot" class="dot disconnected status-dot flex-shrink-0"></span>
               <span id="current-session-label" class="font-bold tracking-tight truncate">session</span>
             </button>
           </div>
@@ -226,7 +226,7 @@
               title="Connection Status"
               class="connection-status-box flex items-center justify-center p-1 cursor-default"
             >
-              <span class="dot connected status-dot"></span>
+              <span class="dot disconnected status-dot"></span>
             </div>
             <button
               id="btn-open-settings"
@@ -375,7 +375,7 @@
       </div>
 
       <!-- Floating Action Button (FAB) Speed Dial -->
-      <div id="fab-container" class="fixed bottom-8 right-8 z-40 flex flex-col items-center">
+      <div id="fab-container" class="fixed bottom-8 right-8 z-40 flex flex-col items-center pointer-events-none">
         <!-- Speed dial sub-buttons: Input, ESC, Up, Down, Enter (opened above keyboard FAB) -->
         <div id="fab-menu" class="hidden flex flex-col items-center gap-2.5 mb-2.5 transition-all duration-200 ease-out origin-bottom">
           <button
@@ -420,8 +420,9 @@
         <!-- Main FAB Button with Keyboard Icon -->
         <button
           id="btn-fab"
+          disabled
           title="Toggle navigation keyboard controls (Esc, Up, Down, Enter, Text Input)"
-          class="w-12 h-12 rounded-full bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] flex items-center justify-center shadow-xl shadow-black/60 border border-[#51afef]/60 transition duration-200 active:scale-95 cursor-pointer"
+          class="w-12 h-12 rounded-full bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] flex items-center justify-center shadow-xl shadow-black/60 border border-[#51afef]/60 transition duration-200 active:scale-95 cursor-pointer opacity-40 cursor-not-allowed pointer-events-none"
           aria-label="Toggle keyboard menu"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

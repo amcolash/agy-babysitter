@@ -129,6 +129,8 @@ export function clearSessionFromStorageAndUrl() {
 
 export function openDrawer() {
   if (window.innerWidth >= 768) return;
+  const disconnectedOverlay = document.getElementById("server-disconnected-state");
+  if (disconnectedOverlay && !disconnectedOverlay.classList.contains("hidden")) return;
   if (!sessionsDrawer || !drawerBackdrop) return;
   isDrawerOpen = true;
   drawerBackdrop.classList.add("open");
@@ -154,6 +156,14 @@ export function updateEmptyState(hasSessions) {
       emptySessionState.classList.remove("hidden");
     }
   }
+  if (!hasSessions) {
+    const mobileHeader = document.getElementById("mobile-session-header");
+    if (headerSessionBadge) headerSessionBadge.classList.add("hidden");
+    if (mobileHeader) {
+      mobileHeader.classList.add("hidden");
+      mobileHeader.classList.remove("flex");
+    }
+  }
 }
 
 export async function terminateSession(sessionName) {
@@ -163,6 +173,7 @@ export async function terminateSession(sessionName) {
   try {
     const res = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, {
       method: "DELETE",
+      credentials: "include",
     });
     const data = await res.json();
 
@@ -402,6 +413,24 @@ export function renderSessions() {
   renderDrawerSessions();
   renderDesktopTabs();
   updateSessionTabIcons();
+
+  const mobileHeader = document.getElementById("mobile-session-header");
+  const disconnectedOverlay = document.getElementById("server-disconnected-state");
+  const isDisconnectedOverlayVisible = disconnectedOverlay && !disconnectedOverlay.classList.contains("hidden");
+
+  if (activeSessionsList.length > 0 && !isDisconnectedOverlayVisible) {
+    if (headerSessionBadge) headerSessionBadge.classList.remove("hidden");
+    if (mobileHeader) {
+      mobileHeader.classList.remove("hidden");
+      mobileHeader.classList.add("flex");
+    }
+  } else {
+    if (headerSessionBadge) headerSessionBadge.classList.add("hidden");
+    if (mobileHeader) {
+      mobileHeader.classList.add("hidden");
+      mobileHeader.classList.remove("flex");
+    }
+  }
 }
 
 export function handleServerSessionsChanged(sessions) {

@@ -102,13 +102,42 @@ export function configureHelperTextarea() {
   }
 }
 
+let isTerminalInputEnabled = false;
+
+export function isTerminalInputAllowed() {
+  return isTerminalInputEnabled;
+}
+
+export function setTerminalInputEnabled(enabled) {
+  isTerminalInputEnabled = Boolean(enabled);
+  try {
+    term.options.disableStdin = !isTerminalInputEnabled;
+  } catch (e) {}
+
+  const helperTextarea = terminalEl ? terminalEl.querySelector('.xterm-helper-textarea') : null;
+  if (helperTextarea) {
+    if (!isTerminalInputEnabled) {
+      helperTextarea.setAttribute('readonly', 'true');
+      helperTextarea.setAttribute('disabled', 'true');
+      helperTextarea.blur();
+    } else {
+      if (!isMobileDevice()) {
+        helperTextarea.removeAttribute('readonly');
+        helperTextarea.removeAttribute('disabled');
+      }
+    }
+  }
+}
+
 export function initTerminal(onInput, onResize) {
   onResizeCallback = onResize;
   term.open(terminalEl);
   fitAddon.fit();
   configureHelperTextarea();
+  setTerminalInputEnabled(false);
 
   term.onData((data) => {
+    if (!isTerminalInputEnabled) return;
     if (onInput) onInput(data);
   });
 
@@ -266,6 +295,10 @@ export function initTerminal(onInput, onResize) {
         if (!hasMovedTouch && isMobileDevice()) {
           // If tap occurred on a button or UI control inside terminalContainer, do not open input modal
           if (e.target && e.target.closest('button, select, input, textarea, a, #btn-open-drawer, #empty-session-state, #server-disconnected-state, #input-popup-overlay, #modal-overlay')) {
+            initialPinchDistance = null;
+            return;
+          }
+          if (!isTerminalInputEnabled) {
             initialPinchDistance = null;
             return;
           }

@@ -151,7 +151,7 @@ function tickQuotaTimes() {
 
 export async function initQuota() {
   try {
-    const res = await fetch('/api/quota');
+    const res = await fetch('/api/quota', { credentials: 'include' });
     if (res.ok) {
       const data = await res.json();
       if (data.quota) {

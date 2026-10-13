@@ -12,6 +12,24 @@ const btnClear = document.getElementById('btn-input-clear-text');
 
 let isOpen = false;
 let openedAt = 0;
+let isInputEnabled = false;
+
+export function isInputModalEnabled() {
+  return isInputEnabled;
+}
+
+export function setInputModalEnabled(enabled) {
+  isInputEnabled = Boolean(enabled);
+  if (!isInputEnabled) {
+    closeInputModal();
+  }
+  if (textarea) {
+    textarea.disabled = !isInputEnabled;
+  }
+  if (btnSend) {
+    btnSend.disabled = !isInputEnabled;
+  }
+}
 
 export function isInputModalOpen() {
   return isOpen;
@@ -19,6 +37,7 @@ export function isInputModalOpen() {
 
 export function openInputModal(initialText = '') {
   if (!inputPopupOverlay || !textarea) return;
+  if (!isInputEnabled) return;
   isOpen = true;
   openedAt = Date.now();
 
@@ -59,7 +78,7 @@ export function closeInputModal() {
 }
 
 export function sendCurrentInput() {
-  if (!textarea) return;
+  if (!isInputEnabled || !textarea) return;
   const text = textarea.value;
   const sendEnter = sendEnterCheckbox ? sendEnterCheckbox.checked : true;
   const replaceLine = replaceLineCheckbox ? replaceLineCheckbox.checked : false;
