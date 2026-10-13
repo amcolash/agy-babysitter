@@ -47,7 +47,7 @@ router.post('/sessions', async (req, res) => {
       });
     }
 
-    const sessionName = name && name.trim() ? name.trim() : path.basename(sessionCwd);
+    const sessionName = name && name.trim() ? name.trim() : getUniqueSessionName(sessionCwd);
     const session = createSession({ name: sessionName, command, cwd: sessionCwd });
     broadcastSessionsList();
     res.json({ name: session.name, created: session.created });

@@ -21,8 +21,21 @@ process.stdin.on('end', () => {
   }
 
   const event = process.argv[2] || 'unknown';
-  const workspacePath = payload.workspacePaths && payload.workspacePaths.length > 0 ? payload.workspacePaths[0] : null;
-  const sessionName = process.env.AGY_SESSION_NAME || process.env.TMUX_SESSION_NAME || (workspacePath ? path.basename(workspacePath) : null);
+  const workspacePath = payload.workspacePaths && payload.workspacePaths.length > 0 ? payload.workspacePaths[0] : (payload.cwd || null);
+
+  let sessionName = process.env.AGY_SESSION_NAME || process.env.TMUX_SESSION_NAME;
+  if (!sessionName && process.env.TMUX) {
+    try {
+      const { execSync } = require('child_process');
+      const out = execSync('tmux display-message -p "#S"', { encoding: 'utf-8', timeout: 500 });
+      if (out && out.trim()) {
+        sessionName = out.trim();
+      }
+    } catch (e) {}
+  }
+  if (!sessionName && workspacePath) {
+    sessionName = path.basename(workspacePath);
+  }
 
   const postData = JSON.stringify({
     event,

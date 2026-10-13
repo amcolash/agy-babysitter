@@ -37,7 +37,7 @@ let isDrawerOpen = false;
 
 function renderStatusIcon(isActive, notif) {
   if (notif) {
-    return `<span class="status-icon-container w-3.5 h-3.5 flex-shrink-0 text-[#ECBE7B] flex items-center justify-center" title="${notif === "input" ? "Waiting for input" : "Turn completed"}"><svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg></span>`;
+    return `<span class="status-icon-container w-3.5 h-3.5 flex-shrink-0 text-[#ECBE7B] flex items-center justify-center animate-pulse" title="${notif === "input" ? "Waiting for input" : "Turn completed"}"><svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg></span>`;
   }
   return `<span class="status-icon-container w-2 h-2 rounded-full flex-shrink-0 ${
     isActive ? "bg-[#98be65] shadow-[0_0_6px_rgba(152,190,101,0.8)]" : "bg-[#5B6268]/50"
@@ -59,14 +59,16 @@ export function sanitizeName(name) {
 }
 
 export function computeUniqueSessionName(folderName) {
-  const base = sanitizeName(folderName);
+  const raw = sanitizeName(folderName);
   const existingNames = new Set(activeSessionsList.map((s) => s.name));
 
-  if (!existingNames.has(base)) {
-    return base;
+  if (!existingNames.has(raw)) {
+    return raw;
   }
 
-  let counter = 2;
+  const match = raw.match(/^(.*?)-(\d+)$/);
+  const base = match ? match[1] : raw;
+  let counter = match ? parseInt(match[2], 10) + 1 : 2;
   while (existingNames.has(`${base}-${counter}`)) {
     counter++;
   }
@@ -218,7 +220,8 @@ function renderDesktopTabs() {
     let tabClasses =
       "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] ";
     if (isActive) {
-      tabClasses += "bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 border-t-[#51afef] border-b-0";
+      const topBorder = notif ? "border-t-[#ECBE7B]" : "border-t-[#51afef]";
+      tabClasses += `bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 ${topBorder} border-b-0`;
     } else if (notif) {
       tabClasses +=
         "bg-[#282c34] text-[#DFDFDF] font-medium border-t-2 border-t-[#ECBE7B]/80 border-b border-b-[#3f444a] hover:bg-[#2d3139]";
@@ -296,7 +299,7 @@ function renderDrawerSessions() {
 
     let itemClasses = "group flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer select-none ";
     if (isActive) {
-      itemClasses += "bg-[#51afef]/10 border-[#51afef]/50 shadow-sm";
+      itemClasses += notif ? "bg-[#ECBE7B]/15 border-[#ECBE7B]/60 shadow-sm" : "bg-[#51afef]/10 border-[#51afef]/50 shadow-sm";
     } else if (notif) {
       itemClasses += "bg-[#ECBE7B]/10 border-[#ECBE7B]/40 hover:bg-[#ECBE7B]/15";
     } else {
@@ -309,8 +312,8 @@ function renderDrawerSessions() {
         ${renderStatusIcon(isActive, notif)}
         <div class="flex flex-col min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="text-xs md:text-sm font-bold ${isActive ? "text-[#51afef]" : notif ? "text-[#DFDFDF]" : "text-[#DFDFDF]"} truncate">${session.name}</span>
-            ${isActive ? '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#51afef]/20 text-[#51afef] rounded font-semibold">Active</span>' : notif ? '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#ECBE7B]/20 text-[#ECBE7B] rounded font-semibold">Alert</span>' : ""}
+            <span class="text-xs md:text-sm font-bold ${isActive ? (notif ? "text-[#ECBE7B]" : "text-[#51afef]") : notif ? "text-[#DFDFDF]" : "text-[#DFDFDF]"} truncate">${session.name}</span>
+            ${isActive ? (notif ? '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#ECBE7B]/20 text-[#ECBE7B] rounded font-semibold">Alert</span>' : '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#51afef]/20 text-[#51afef] rounded font-semibold">Active</span>') : notif ? '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#ECBE7B]/20 text-[#ECBE7B] rounded font-semibold">Alert</span>' : ""}
           </div>
           <span class="text-[11px] text-[#5B6268] truncate">${session.cwd || session.path || "default"}</span>
         </div>
@@ -343,8 +346,9 @@ export function updateSessionTabIcons() {
       const notif = getSessionNotification(name);
 
       if (isActive) {
+        const topBorder = notif ? "border-t-[#ECBE7B]" : "border-t-[#51afef]";
         tab.className =
-          "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 border-t-[#51afef] border-b-0";
+          `session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 ${topBorder} border-b-0`;
       } else if (notif) {
         tab.className =
           "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] bg-[#282c34] text-[#DFDFDF] font-medium border-t-2 border-t-[#ECBE7B]/80 border-b border-b-[#3f444a] hover:bg-[#2d3139]";
@@ -355,7 +359,7 @@ export function updateSessionTabIcons() {
 
       const label = tab.querySelector("span.tracking-tight");
       if (label) {
-        label.className = `tracking-tight truncate ${isActive ? "text-[#51afef]" : notif ? "text-[#DFDFDF]" : ""}`;
+        label.className = `tracking-tight truncate ${isActive ? (notif ? "text-[#ECBE7B]" : "text-[#51afef]") : notif ? "text-[#DFDFDF]" : ""}`;
       }
 
       const iconContainer = tab.querySelector(".status-icon-container");
@@ -375,7 +379,7 @@ export function updateSessionTabIcons() {
 
       if (isActive) {
         item.className =
-          "group flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer select-none bg-[#51afef]/10 border-[#51afef]/50 shadow-sm";
+          `group flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer select-none ${notif ? "bg-[#ECBE7B]/15 border-[#ECBE7B]/60 shadow-sm" : "bg-[#51afef]/10 border-[#51afef]/50 shadow-sm"}`;
       } else if (notif) {
         item.className =
           "group flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer select-none bg-[#ECBE7B]/10 border-[#ECBE7B]/40 hover:bg-[#ECBE7B]/15";

@@ -9,8 +9,14 @@ const router = express.Router();
  */
 router.post('/hook/notify', (req, res) => {
   try {
-    const { event, session, conversationId, toolCall, payload } = req.body || {};
-    handleLifecycleHookEvent({ event, session, conversationId, toolCall });
+    const { event, session, workspacePath, conversationId, toolCall, payload } = req.body || {};
+    handleLifecycleHookEvent({
+      event,
+      session,
+      workspacePath: workspacePath || payload?.workspacePath || payload?.cwd,
+      conversationId,
+      toolCall
+    });
     if (req.body?.quota || payload?.quota) {
       const saved = saveQuota(req.body.quota ? req.body : payload);
       if (saved) broadcastQuota(saved);

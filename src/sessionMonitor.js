@@ -1,3 +1,4 @@
+import path from 'path';
 import { WebSocket } from 'ws';
 import { touchWakelock } from './wakelock.js';
 import { listSessions } from './tmuxManager.js';
@@ -103,27 +104,48 @@ export function broadcastSessionNotification(session, state) {
  * @param {Object} payload
  * @param {string} payload.event - 'pre_invocation' | 'stop' | 'ask_question'
  * @param {string} payload.session - session or directory name
+ * @param {string} [payload.workspacePath] - directory path of workspace
  * @param {string} [payload.conversationId]
  * @param {string} [payload.toolCall]
  */
-export function handleLifecycleHookEvent({ event, session, conversationId, toolCall }) {
-  if (!session) return;
+export function handleLifecycleHookEvent({ event, session, workspacePath, conversationId, toolCall }) {
+  const currentSessions = listSessions();
+  let targetSession = null;
 
-  console.log(`[LifecycleHook] Received event '${event}' for session '${session}'`);
+  // 1. Check if passed session name matches an active tmux session
+  if (session && currentSessions.some((s) => s.name === session)) {
+    targetSession = session;
+  }
+  // 2. Check if workspacePath matches an active tmux session's cwd
+  if (!targetSession && workspacePath) {
+    const normalizedWp = path.resolve(workspacePath);
+    const matchedByCwd = currentSessions.find((s) => s.cwd && path.resolve(s.cwd) === normalizedWp);
+    if (matchedByCwd) {
+      targetSession = matchedByCwd.name;
+    }
+  }
+  // 3. Fallback to passed session name
+  if (!targetSession && session) {
+    targetSession = session;
+  }
+
+  if (!targetSession) return;
+
+  console.log(`[LifecycleHook] Received event '${event}' for session '${targetSession}' (original: '${session || ''}', workspace: '${workspacePath || ''}')`);
   touchWakelock();
 
   if (event === 'pre_invocation') {
     // Agent started thinking/working: clear notification state
-    sessionStates.set(session, null);
-    broadcastSessionNotification(session, null);
+    sessionStates.set(targetSession, null);
+    broadcastSessionNotification(targetSession, null);
   } else if (event === 'stop') {
     // Agent finished turn: notify turn completed
-    sessionStates.set(session, 'settled');
-    broadcastSessionNotification(session, 'settled');
+    sessionStates.set(targetSession, 'settled');
+    broadcastSessionNotification(targetSession, 'settled');
   } else if (event === 'ask_question') {
     // Agent is waiting for user confirmation or input
-    sessionStates.set(session, 'input');
-    broadcastSessionNotification(session, 'input');
+    sessionStates.set(targetSession, 'input');
+    broadcastSessionNotification(targetSession, 'input');
   }
 }
 

@@ -11,6 +11,7 @@ import {
   listSessions,
   createSession,
   hasSession,
+  getUniqueSessionName,
   sanitizeSessionName,
   applyTmuxGlobalOptions
 } from './tmuxManager.js';
@@ -114,7 +115,7 @@ function attachSession(sessionName, cwd, command) {
   process.stdin.pause();
 
   // Attach directly to tmux synchronously with inherited stdio for 100% native terminal speed
-  const res = spawnSync('tmux', ['attach-session', '-t', name], {
+  const res = spawnSync('tmux', ['attach-session', '-t', `=${name}`], {
     cwd: targetCwd,
     stdio: 'inherit',
     env: {
@@ -150,11 +151,19 @@ async function promptCreateSession() {
   );
   const sessionCwd = rawPath ? resolveTilde(rawPath) : defaultDir;
 
-  const defaultName = sanitizeSessionName(path.basename(sessionCwd));
+  const defaultName = getUniqueSessionName(sessionCwd);
   const rawName = await question(
     `\x1b[38;2;81;175;239mSession name\x1b[0m [\x1b[38;2;91;98;104m${defaultName}\x1b[0m]: `
   );
-  const sessionName = rawName ? sanitizeSessionName(rawName) : defaultName;
+  let sessionName = rawName ? sanitizeSessionName(rawName) : defaultName;
+
+  if (hasSession(sessionName)) {
+    const nonConflictingName = getUniqueSessionName(sessionName);
+    process.stdout.write(
+      `\x1b[38;2;236;190;123mℹ\x1b[0m Session '\x1b[1m${sessionName}\x1b[0m' already exists. Using '\x1b[1m${nonConflictingName}\x1b[0m'.\n`
+    );
+    sessionName = nonConflictingName;
+  }
 
   process.stdout.write(
     `\n\x1b[38;2;81;175;239m➜\x1b[0m Launching session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
@@ -427,6 +436,7 @@ async function main() {
   agyh                     Interactive TUI session selector
   agyh <path>              Open/create session for directory path (e.g. agyh ~/Github/my-repo)
   agyh <session-name>      Attach to or create named session
+  agyh -n, --new [target]  Create a new session (auto-increments if name exists)
   agyh -r, --restart       Restart agy-babysitter systemd service
   agyh -k, --stop          Stop agy-babysitter systemd service
   agyh -s, --status        Check systemd service status
@@ -439,6 +449,38 @@ async function main() {
     return;
   }
 
+  // Handle -n / --new / new flag for explicit session creation
+  if (args.includes('-n') || args.includes('--new') || args[0] === 'new') {
+    await ensureServerRunning();
+    const newArgs = args.filter((a) => a !== '-n' && a !== '--new' && a !== 'new');
+    if (newArgs.length > 0) {
+      const target = newArgs[0];
+      const resolvedPath = resolveTilde(target);
+      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
+        const sessionCwd = resolvedPath;
+        const sessionName = getUniqueSessionName(sessionCwd);
+        process.stdout.write(
+          `\n\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
+        );
+        createSession({ name: sessionName, cwd: sessionCwd });
+        attachSession(sessionName, sessionCwd);
+        return;
+      } else {
+        const rawName = sanitizeSessionName(target);
+        const sessionName = hasSession(rawName) ? getUniqueSessionName(rawName) : rawName;
+        const sessionCwd = process.cwd();
+        process.stdout.write(
+          `\n\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(sessionCwd)}\x1b[0m...\n\n`
+        );
+        createSession({ name: sessionName, cwd: sessionCwd });
+        attachSession(sessionName, sessionCwd);
+        return;
+      }
+    }
+    await promptCreateSession();
+    return;
+  }
+
   // If a path or session name was passed as argument
   if (args.length > 0 && args[0] && !args[0].startsWith('-')) {
     await ensureServerRunning();
@@ -448,10 +490,13 @@ async function main() {
     // Case 1: Target is an existing directory path
     if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
       const targetCwd = resolvedPath;
+      const baseName = sanitizeSessionName(path.basename(targetCwd));
       const sessions = listSessions();
 
-      // Check if a session already exists pointing to this exact path
-      const existingForPath = sessions.find((s) => s.cwd === targetCwd);
+      // Check if a session already exists pointing to this exact path (prefer exact name match if multiple)
+      const existingForPath =
+        sessions.find((s) => s.cwd === targetCwd && s.name === baseName) ||
+        sessions.find((s) => s.cwd === targetCwd);
       if (existingForPath) {
         process.stdout.write(
           `\x1b[38;2;81;175;239m➜\x1b[0m Found active session '\x1b[1m${existingForPath.name}\x1b[0m' for \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m. Attaching...\n\n`
@@ -460,23 +505,13 @@ async function main() {
         return;
       }
 
-      // Check if a session with basename exists
-      const baseName = sanitizeSessionName(path.basename(targetCwd));
-      const existingByName = sessions.find((s) => s.name === baseName);
-      if (existingByName) {
-        process.stdout.write(
-          `\x1b[38;2;81;175;239m➜\x1b[0m Attaching to '\x1b[1m${existingByName.name}\x1b[0m'...\n\n`
-        );
-        attachSession(existingByName.name, targetCwd);
-        return;
-      }
-
-      // Create new session for this path
+      // Create new session for this path with non-conflicting name
+      const sessionName = getUniqueSessionName(baseName);
       process.stdout.write(
-        `\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${baseName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m...\n\n`
+        `\x1b[38;2;81;175;239m➜\x1b[0m Creating session '\x1b[1m${sessionName}\x1b[0m' in \x1b[38;2;91;98;104m${formatDisplayPath(targetCwd)}\x1b[0m...\n\n`
       );
-      createSession({ name: baseName, cwd: targetCwd });
-      attachSession(baseName, targetCwd);
+      createSession({ name: sessionName, cwd: targetCwd });
+      attachSession(sessionName, targetCwd);
       return;
     }
 

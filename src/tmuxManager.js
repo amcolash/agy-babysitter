@@ -46,7 +46,7 @@ export function listSessions() {
 export function hasSession(name) {
   if (!name) return false;
   try {
-    execSync(`tmux has-session -t ${JSON.stringify(sanitizeSessionName(name))} 2>/dev/null`, {
+    execSync(`tmux has-session -t ${JSON.stringify('=' + sanitizeSessionName(name))} 2>/dev/null`, {
       env: { ...process.env, PATH: AUGMENTED_PATH }
     });
     return true;
@@ -70,11 +70,13 @@ export function getSession(name) {
  * @param {string} cwdOrName 
  */
 export function getUniqueSessionName(cwdOrName) {
-  const base = sanitizeSessionName(path.basename(cwdOrName || config.DEFAULT_CWD));
-  if (!hasSession(base)) {
-    return base;
+  const raw = sanitizeSessionName(path.basename(cwdOrName || config.DEFAULT_CWD));
+  if (!hasSession(raw)) {
+    return raw;
   }
-  let counter = 2;
+  const match = raw.match(/^(.*?)-(\d+)$/);
+  const base = match ? match[1] : raw;
+  let counter = match ? parseInt(match[2], 10) + 1 : 2;
   while (hasSession(`${base}-${counter}`)) {
     counter++;
   }
@@ -103,13 +105,15 @@ export function applyTmuxGlobalOptions(sessionName) {
     execSync('tmux unbind-key -T copy-mode-vi MouseDown3Pane 2>/dev/null || true', opts);
 
     if (sessionName) {
-      const s = JSON.stringify(sessionName);
-      execSync(`tmux set-option -t ${s} history-limit 50000 2>/dev/null || true`, opts);
-      execSync(`tmux set-option -t ${s} mouse on 2>/dev/null || true`, opts);
-      execSync(`tmux set-option -t ${s} window-size latest 2>/dev/null || true`, opts);
-      execSync(`tmux set-option -t ${s} status off 2>/dev/null || true`, opts);
-      execSync(`tmux set-environment -t ${s} AGY_SESSION_NAME ${s} 2>/dev/null || true`, opts);
-      execSync(`tmux set-environment -t ${s} PATH ${JSON.stringify(AUGMENTED_PATH)} 2>/dev/null || true`, opts);
+      const sanitized = sanitizeSessionName(sessionName);
+      const targetWindow = JSON.stringify('=' + sanitized + ':');
+      const targetSession = JSON.stringify('=' + sanitized);
+      execSync(`tmux set-option -t ${targetWindow} history-limit 50000 2>/dev/null || true`, opts);
+      execSync(`tmux set-option -t ${targetWindow} mouse on 2>/dev/null || true`, opts);
+      execSync(`tmux set-option -t ${targetWindow} window-size latest 2>/dev/null || true`, opts);
+      execSync(`tmux set-option -t ${targetWindow} status off 2>/dev/null || true`, opts);
+      execSync(`tmux set-environment -t ${targetSession} AGY_SESSION_NAME ${JSON.stringify(sanitized)} 2>/dev/null || true`, opts);
+      execSync(`tmux set-environment -t ${targetSession} PATH ${JSON.stringify(AUGMENTED_PATH)} 2>/dev/null || true`, opts);
     }
   } catch (e) {}
 }
@@ -141,7 +145,7 @@ export function createSession({ name = config.DEFAULT_SESSION, cwd, command } = 
 
   // Create detached tmux session running the target command
   execSync(
-    `tmux new-session -d -s ${JSON.stringify(sessionName)} -c ${JSON.stringify(targetCwd)} ${JSON.stringify(targetCommand)}`,
+    `tmux new-session -d -s ${JSON.stringify(sessionName)} -c ${JSON.stringify(targetCwd)} -e AGY_SESSION_NAME=${JSON.stringify(sessionName)} ${JSON.stringify(targetCommand)}`,
     {
       env: {
         ...process.env,
@@ -173,7 +177,7 @@ export function terminateSession(name) {
     return false;
   }
   try {
-    execSync(`tmux kill-session -t ${JSON.stringify(sessionName)} 2>/dev/null`, {
+    execSync(`tmux kill-session -t ${JSON.stringify('=' + sessionName)} 2>/dev/null`, {
       env: { ...process.env, PATH: AUGMENTED_PATH }
     });
     return true;
@@ -198,7 +202,7 @@ export function attachPtySession({ sessionName, cols = 100, rows = 30 }) {
 
   applyTmuxGlobalOptions(name);
 
-  const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', name], {
+  const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', `=${name}`], {
     name: 'xterm-256color',
     cols: Math.max(20, cols || 100),
     rows: Math.max(5, rows || 30),

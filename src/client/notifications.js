@@ -151,7 +151,8 @@ function getSessionState(sessionName) {
   if (!sessionStates.has(sessionName)) {
     sessionStates.set(sessionName, {
       lastSnapshot: null,
-      notified: null
+      notified: null,
+      notifiedAt: 0
     });
   }
   return sessionStates.get(sessionName);
@@ -191,6 +192,7 @@ export function clearSessionNotification(sessionName) {
   const s = sessionStates.get(sessionName);
   if (s && s.notified !== null) {
     s.notified = null;
+    s.notifiedAt = 0;
     updatePageTitle();
     if (onNotificationChangeCallback) {
       onNotificationChangeCallback(sessionName, null);
@@ -205,6 +207,7 @@ export function handleServerSessionNotification(sessionName, state) {
   const prevState = s.notified;
   if (prevState === state) return;
   s.notified = state;
+  s.notifiedAt = state ? Date.now() : 0;
   updatePageTitle();
   if (onNotificationChangeCallback) {
     onNotificationChangeCallback(sessionName, state);
@@ -221,6 +224,7 @@ export function handleServerSessionNotificationsSync(states) {
     const s = getSessionState(name);
     if (s.notified !== state) {
       s.notified = state;
+      s.notifiedAt = state ? Date.now() : 0;
       changed = true;
     }
   }
@@ -236,8 +240,7 @@ export function onSessionConnected(sessionName) {
   if (!sessionName) return;
   const state = getSessionState(sessionName);
   state.lastSnapshot = null;
-  state.notified = null;
-  clearSessionNotification(sessionName);
+  // Preserve notification state on connect so the bell remains visible until actual user interaction
 }
 
 export function markTurnStarted(sessionName = null) {
@@ -256,6 +259,10 @@ export function handleUserInteraction() {
   if (current) {
     const s = sessionStates.get(current);
     if (s && s.notified !== null) {
+      // Keep notification visible for at least 1000ms after arrival so user clearly sees it
+      if (Date.now() - (s.notifiedAt || 0) < 1000) {
+        return;
+      }
       clearSessionNotification(current);
     }
   }
@@ -293,36 +300,26 @@ export function onTerminalDataReceived(data) {
 }
 
 /**
- * Initialize global interaction listeners to unlock audio, track resize, & clear notifications on any user action
+ * Initialize interaction listeners to unlock audio and clear notifications on genuine user interaction
  */
 export function initNotifications() {
-  const interactionEvents = [
-    'click',
-    'mousedown',
-    'mouseup',
-    'mousemove',
-    'pointerdown',
-    'pointermove',
+  // Only genuine user actions (keyboard typing, mouse clicks, mobile touches) clear notifications.
+  // Passive events (mousemove, wheel, focus, visibilitychange) NEVER clear notifications!
+  const realInteractionEvents = [
     'keydown',
-    'keyup',
-    'touchstart',
-    'touchend',
-    'touchmove',
-    'wheel',
-    'focus'
+    'pointerdown',
+    'touchstart'
   ];
 
-  interactionEvents.forEach((ev) => {
+  realInteractionEvents.forEach((ev) => {
     window.addEventListener(ev, handleUserInteraction, { passive: true });
   });
 
-  window.addEventListener('resize', onTerminalResized, { passive: true });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      handleUserInteraction();
-    }
+  // AudioContext unlock on initial user gesture without clearing notifications
+  const gestureEvents = ['click', 'keydown', 'touchstart'];
+  gestureEvents.forEach((ev) => {
+    window.addEventListener(ev, unlockAudio, { passive: true });
   });
 
-  window.addEventListener('focus', handleUserInteraction, { passive: true });
+  window.addEventListener('resize', onTerminalResized, { passive: true });
 }
