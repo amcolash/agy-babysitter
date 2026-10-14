@@ -212,6 +212,48 @@ html, body {
   background-color: #1b2229;
 }
 
+/* Reliable cursor blinking animations matching Doom One theme */
+@keyframes agy-cursor-blink-bar {
+  0%, 100% {
+    box-shadow: 2px 0 0 #51afef inset;
+  }
+  50% {
+    box-shadow: none;
+  }
+}
+
+@keyframes agy-cursor-blink-block {
+  0%, 100% {
+    background-color: #51afef;
+    color: #282c34;
+  }
+  50% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+
+@keyframes agy-cursor-blink-underline {
+  0%, 100% {
+    border-bottom: 1px solid #51afef;
+  }
+  50% {
+    border-bottom: 1px solid transparent;
+  }
+}
+
+.xterm .xterm-cursor.xterm-cursor-bar {
+  animation: agy-cursor-blink-bar 1s step-end infinite !important;
+}
+
+.xterm .xterm-cursor.xterm-cursor-block {
+  animation: agy-cursor-blink-block 1s step-end infinite !important;
+}
+
+.xterm .xterm-cursor.xterm-cursor-underline {
+  animation: agy-cursor-blink-underline 1s step-end infinite !important;
+}
+
 /* Slide-over Sessions Drawer & Backdrop */
 #drawer-backdrop {
   opacity: 0;

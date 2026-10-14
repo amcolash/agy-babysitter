@@ -79,6 +79,41 @@ term.loadAddon(fitAddon);
 export const webLinksAddon = new WebLinksAddon();
 term.loadAddon(webLinksAddon);
 
+// Register parser handlers to ensure cursorBlink is never disabled by terminal escape sequences (such as DEC private mode 12 or DECSCUSR steady cursors)
+term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => {
+  const has12 = params.some((p) => p === 12 || (Array.isArray(p) && p[0] === 12));
+  if (has12) {
+    queueMicrotask(() => {
+      term.options.cursorBlink = true;
+      if (term._core?.coreService?.decPrivateModes) {
+        term._core.coreService.decPrivateModes.cursorBlink = true;
+      }
+    });
+    if (params.length === 1) return true;
+  }
+  return false;
+});
+
+term.parser.registerCsiHandler({ intermediates: ' ', final: 'q' }, (params) => {
+  let val = params[0] || 1;
+  // If steady cursor is requested (2, 4, 6), convert to blinking equivalent (1, 3, 5)
+  if (val === 2) val = 1;
+  else if (val === 4) val = 3;
+  else if (val === 6) val = 5;
+  else if (val === 0) val = 5;
+
+  let style = 'bar';
+  if (val === 1) style = 'block';
+  else if (val === 3) style = 'underline';
+  else if (val === 5) style = 'bar';
+
+  if (term._core?.coreService?.decPrivateModes) {
+    term._core.coreService.decPrivateModes.cursorStyle = style;
+    term._core.coreService.decPrivateModes.cursorBlink = true;
+  }
+  return true;
+});
+
 let onResizeCallback = null;
 
 export function configureHelperTextarea() {
@@ -774,6 +809,9 @@ export function handleTerminalResize() {
 }
 
 export function writeTerminal(data) {
+  if (typeof data === 'string' && data.includes('\x1b[?12l')) {
+    data = data.replaceAll('\x1b[?12l', '');
+  }
   term.write(data);
 }
 

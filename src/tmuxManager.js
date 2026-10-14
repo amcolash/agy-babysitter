@@ -92,6 +92,8 @@ export function applyTmuxGlobalOptions(sessionName) {
     const opts = { env: { ...process.env, PATH: AUGMENTED_PATH } };
     execSync('tmux set-option -s escape-time 0 2>/dev/null || true', opts);
     execSync(`tmux set-environment -g PATH ${JSON.stringify(AUGMENTED_PATH)} 2>/dev/null || true`, opts);
+    // Prevent tmux from emitting \033[?12l (cnorm) which disables cursor blinking in xterm
+    execSync('tmux set-option -s -a terminal-overrides ",xterm*:cnorm=\\E[?25h" 2>/dev/null || true', opts);
     // Disable right-click menus so the terminal emulator's native context menu works cleanly
     execSync('tmux unbind-key -n MouseDown3Pane 2>/dev/null || true', opts);
     execSync('tmux unbind-key -n M-MouseDown3Pane 2>/dev/null || true', opts);
