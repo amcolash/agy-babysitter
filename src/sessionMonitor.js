@@ -9,6 +9,8 @@ import { AUGMENTED_PATH } from './config.js';
 const sessionStates = new Map();
 // Tracks consecutive misses when an 'input' state is active, to debounce clearing
 const pendingInputMisses = new Map();
+// Tracks sessions where the user actively dismissed the current prompt notification
+const dismissedPromptSessions = new Set();
 let wssInstance = null;
 let monitorInterval = null;
 let lastSessionsHash = '';
@@ -19,15 +21,15 @@ function getSessionsSignature(sessions) {
 
 /**
  * Pattern that detects Antigravity confirmation prompts or interactive questions
- * in the visible terminal pane.
+ * in the active prompt area of the visible terminal pane.
  * @param {string} paneContent
  * @returns {boolean}
  */
 export function isPaneAwaitingConfirmation(paneContent) {
   if (!paneContent || typeof paneContent !== 'string') return false;
 
-  // Inspect the bottom portion of the visible pane (last 30 lines) where prompts appear
-  const lines = paneContent.split('\n').slice(-30).join('\n');
+  // Inspect the bottom 15 lines of the visible pane where active prompts reside
+  const lines = paneContent.split('\n').slice(-15).join('\n');
 
   // 1. Antigravity permission prompt headers
   const hasPermissionHeader = /Requesting permission (?:for|to)/i.test(lines);
@@ -35,39 +37,31 @@ export function isPaneAwaitingConfirmation(paneContent) {
   // 2. Specific permission questions
   const hasPermissionQuestion = /(?:Run this command\?|Allow access to this (?:file|URL)\?|Allow calling this tool\?|Do you want to (?:run|proceed|continue)\?)/i.test(lines);
 
-  // 3. Choice options
-  const hasConfirmationChoices = /(?:(?:>|\s)\s*1\.\s*Yes|\bYes,\s*(?:run|allow|proceed)|\bNo,\s*cancel)/i.test(lines);
+  // 3. Choice options: must have an affirmative choice AND a cancellation choice
+  const hasYesChoice = /(?:(?:>|\s)\s*1\.\s*Yes|\bYes,\s*(?:run|allow|proceed))\b/i.test(lines);
+  const hasNoChoice = /(?:(?:>|\s)\s*2\.\s*No|\bNo,\s*cancel)\b/i.test(lines);
+  const hasConfirmationChoices = hasYesChoice && hasNoChoice;
 
   // 4. Keyboard navigation hints commonly shown in prompt modals
   const hasNavigationHint = /(?:↑\/↓|Navigate\s*·)/i.test(lines);
 
-  // 5. Numbered menu choices (e.g. "> 1. " / "  2. ")
-  const hasMenuChoices = /(?:>|\s)\s*1\.\s+/i.test(lines);
+  // 5. Numbered menu choices (e.g. "> 1. " followed by " 2. ")
+  const hasMenuChoices = /(?:>|\s)\s*1\.\s+.*\n.*(?:>|\s)\s*2\.\s+/i.test(lines);
 
-  // 6. Generic interactive CLI prompts (e.g. [y/n] or (Y/n))
-  const hasGenericPrompt = /(?:\[y\/n\]|\([yY]\/[nN]\))/i.test(lines);
+  // 6. Generic interactive CLI prompts (e.g. [y/n] or (Y/n) at end of prompt)
+  const hasGenericPrompt = /(?:\[y\/n\]|\([yY]\/[nN]\))\s*$/im.test(lines);
 
-  // Condition A: Standard Antigravity tool permission prompt
-  if (hasPermissionHeader && (hasConfirmationChoices || hasPermissionQuestion || hasNavigationHint)) {
+  // Condition A: Standard Antigravity tool permission prompt (must have prompt header or question AND both confirmation choices)
+  if ((hasPermissionHeader || hasPermissionQuestion) && hasConfirmationChoices) {
     return true;
   }
 
-  // Condition B: Direct confirmation question with choices or navigation
-  if (hasPermissionQuestion && (hasConfirmationChoices || hasNavigationHint)) {
-    return true;
-  }
-
-  // Condition C: Confirmation options with navigation hint
-  if (hasConfirmationChoices && hasNavigationHint) {
-    return true;
-  }
-
-  // Condition D: Interactive choice menu (e.g. ask_question prompt)
+  // Condition B: Interactive choice menu (e.g. ask_question prompt with choices and navigation)
   if (hasNavigationHint && hasMenuChoices) {
     return true;
   }
 
-  // Condition E: Generic CLI prompt
+  // Condition C: Generic CLI prompt waiting at prompt line
   if (hasGenericPrompt) {
     return true;
   }
@@ -147,21 +141,30 @@ export async function checkSessionChanges() {
 
       if (awaiting) {
         pendingInputMisses.delete(session.name);
+        // If user already dismissed notifications for this prompt, do not re-notify
+        if (dismissedPromptSessions.has(session.name)) {
+          continue;
+        }
         if (currentState !== 'input') {
           sessionStates.set(session.name, 'input');
           broadcastSessionNotification(session.name, 'input');
         }
-      } else if (currentState === 'input') {
-        // Confirmation prompt disappeared: after 2 consecutive checks, clear input state
-        const misses = (pendingInputMisses.get(session.name) || 0) + 1;
-        pendingInputMisses.set(session.name, misses);
-        if (misses >= 2) {
-          pendingInputMisses.delete(session.name);
-          sessionStates.set(session.name, null);
-          broadcastSessionNotification(session.name, null);
-        }
       } else {
-        pendingInputMisses.delete(session.name);
+        // Prompt is no longer on screen: reset dismissed status
+        dismissedPromptSessions.delete(session.name);
+
+        if (currentState === 'input') {
+          // Confirmation prompt disappeared: after 2 consecutive checks, clear input state
+          const misses = (pendingInputMisses.get(session.name) || 0) + 1;
+          pendingInputMisses.set(session.name, misses);
+          if (misses >= 2) {
+            pendingInputMisses.delete(session.name);
+            sessionStates.set(session.name, null);
+            broadcastSessionNotification(session.name, null);
+          }
+        } else {
+          pendingInputMisses.delete(session.name);
+        }
       }
     }
   } catch (e) {}
@@ -260,16 +263,19 @@ export function handleLifecycleHookEvent({ event, session, workspacePath, conver
   if (event === 'pre_invocation') {
     // Agent started thinking/working: clear notification state
     pendingInputMisses.delete(targetSession);
+    dismissedPromptSessions.delete(targetSession);
     sessionStates.set(targetSession, null);
     broadcastSessionNotification(targetSession, null);
   } else if (event === 'stop') {
     // Agent finished turn: notify turn completed
     pendingInputMisses.delete(targetSession);
+    dismissedPromptSessions.delete(targetSession);
     sessionStates.set(targetSession, 'settled');
     broadcastSessionNotification(targetSession, 'settled');
   } else if (event === 'ask_question' || (event === 'pre_tool_use' && toolCall === 'ask_question')) {
     // Agent is asking a question: user input is required
     pendingInputMisses.delete(targetSession);
+    dismissedPromptSessions.delete(targetSession);
     sessionStates.set(targetSession, 'input');
     broadcastSessionNotification(targetSession, 'input');
   } else if (event === 'pre_tool_use') {
@@ -297,6 +303,7 @@ export function scheduleToolPermissionChecks(sessionName) {
     setTimeout(async () => {
       // Don't overwrite if session has already changed to another state (like 'settled')
       if (sessionStates.get(sessionName) === 'settled') return;
+      if (dismissedPromptSessions.has(sessionName)) return;
       const awaiting = await checkSessionAwaitingInput(sessionName);
       if (awaiting && sessionStates.get(sessionName) !== 'input') {
         pendingInputMisses.delete(sessionName);
@@ -314,6 +321,7 @@ export function scheduleToolPermissionChecks(sessionName) {
 export function markTurnStarted(sessionName) {
   if (!sessionName) return;
   pendingInputMisses.delete(sessionName);
+  dismissedPromptSessions.delete(sessionName);
   sessionStates.set(sessionName, null);
   broadcastSessionNotification(sessionName, null);
 }
@@ -325,6 +333,7 @@ export function markTurnStarted(sessionName) {
 export function clearNotification(sessionName) {
   if (!sessionName) return;
   pendingInputMisses.delete(sessionName);
+  dismissedPromptSessions.add(sessionName);
   const prevState = sessionStates.get(sessionName);
   sessionStates.set(sessionName, null);
   if (prevState) {
@@ -374,6 +383,7 @@ export function stopSessionMonitor() {
   }
   sessionStates.clear();
   pendingInputMisses.clear();
+  dismissedPromptSessions.clear();
   wssInstance = null;
 }
 
