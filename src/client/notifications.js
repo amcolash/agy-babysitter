@@ -187,8 +187,20 @@ export function pruneSessionNotifications(validSessionNames) {
   }
 }
 
+let focusDismissTimer = null;
+
+export function cancelFocusDismissTimer() {
+  if (focusDismissTimer) {
+    clearTimeout(focusDismissTimer);
+    focusDismissTimer = null;
+  }
+}
+
 export function clearSessionNotification(sessionName) {
   if (!sessionName) return;
+  if (getCurrentSession() === sessionName) {
+    cancelFocusDismissTimer();
+  }
   const s = sessionStates.get(sessionName);
   if (s && s.notified !== null) {
     s.notified = null;
@@ -215,6 +227,9 @@ export function handleServerSessionNotification(sessionName, state) {
   if (state && state !== prevState) {
     playNotificationSound();
   }
+  if (!state && getCurrentSession() === sessionName) {
+    cancelFocusDismissTimer();
+  }
 }
 
 export function handleServerSessionNotificationsSync(states) {
@@ -226,6 +241,9 @@ export function handleServerSessionNotificationsSync(states) {
       s.notified = state;
       s.notifiedAt = state ? Date.now() : 0;
       changed = true;
+    }
+    if (!state && getCurrentSession() === name) {
+      cancelFocusDismissTimer();
     }
   }
   if (changed) {
@@ -248,6 +266,21 @@ export function onSessionFocused(sessionName) {
   if (!sessionName) return;
   const s = getSessionState(sessionName);
   s.focusedAt = Date.now();
+
+  cancelFocusDismissTimer();
+
+  // If this session has an active notification, dismiss 1s after switching to it (similar to other interactions)
+  if (s.notified !== null) {
+    const remainingAfterArrival = Math.max(0, 1000 - (Date.now() - (s.notifiedAt || 0)));
+    const delay = Math.max(1000, remainingAfterArrival);
+
+    focusDismissTimer = setTimeout(() => {
+      focusDismissTimer = null;
+      if (getCurrentSession() === sessionName && s.notified !== null) {
+        clearSessionNotification(sessionName);
+      }
+    }, delay);
+  }
 }
 
 export function markTurnStarted(sessionName = null) {
