@@ -433,12 +433,35 @@ export function initTerminal(onInput, onResize) {
         pasteClipboardToTerminal(onInput);
         return;
       }
+
+      // Shift+Enter: send modifyOtherKeys Shift+Enter (\x1b[27;2;13~) so CLI inserts a newline instead of submitting
+      const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13;
+      if (isEnter && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onInput) {
+          onInput('\x1b[27;2;13~');
+        }
+        return;
+      }
     },
     { capture: true }
   );
 
-  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow)
+  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
   term.attachCustomKeyEventHandler((e) => {
+    const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13;
+    if (isEnter && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing) {
+      if (e.type === 'keydown') {
+        if (onInput) {
+          onInput('\x1b[27;2;13~');
+        }
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
     const isPrevTab =
       (e.ctrlKey || e.metaKey) &&
       e.shiftKey &&
