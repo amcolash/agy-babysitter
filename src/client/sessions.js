@@ -35,6 +35,42 @@ const btnDesktopNewSession = document.getElementById("btn-desktop-new-session");
 
 let activeSessionsList = [];
 let isDrawerOpen = false;
+let draggedSessionName = null;
+
+const STORAGE_TAB_ORDER_KEY = "agy_tabs_order";
+
+export function getCustomTabOrder() {
+  try {
+    const raw = localStorage.getItem(STORAGE_TAB_ORDER_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+export function saveCustomTabOrder(orderArray) {
+  try {
+    localStorage.setItem(STORAGE_TAB_ORDER_KEY, JSON.stringify(orderArray));
+  } catch (e) {}
+}
+
+export function sortSessionsByCustomOrder(sessions) {
+  if (!Array.isArray(sessions) || sessions.length <= 1) return sessions;
+  const customOrder = getCustomTabOrder();
+  if (customOrder.length === 0) return sessions;
+
+  const orderMap = new Map();
+  customOrder.forEach((name, idx) => orderMap.set(name, idx));
+
+  return [...sessions].sort((a, b) => {
+    const aOrder = orderMap.has(a.name) ? orderMap.get(a.name) : Infinity;
+    const bOrder = orderMap.has(b.name) ? orderMap.get(b.name) : Infinity;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return (a.createdAt || 0) - (b.createdAt || 0);
+  });
+}
 
 function renderStatusIcon(isActive, notif) {
   if (notif) {
@@ -115,6 +151,21 @@ export function switchRelativeSession(direction) {
   if (target) {
     switchToSession(target.name);
   }
+}
+
+export function moveActiveSession(direction) {
+  if (!activeSessionsList || activeSessionsList.length <= 1) return;
+  const current = getCurrentSession();
+  const currentIndex = activeSessionsList.findIndex((s) => s.name === current);
+  if (currentIndex === -1) return;
+
+  const targetIndex = currentIndex + direction;
+  if (targetIndex < 0 || targetIndex >= activeSessionsList.length) return;
+
+  const [moved] = activeSessionsList.splice(currentIndex, 1);
+  activeSessionsList.splice(targetIndex, 0, moved);
+  saveCustomTabOrder(activeSessionsList.map((s) => s.name));
+  renderSessions();
 }
 
 export function clearSessionFromStorageAndUrl() {
@@ -233,13 +284,15 @@ function renderDesktopTabs() {
     }
     tab.className = tabClasses;
     tab.dataset.sessionName = session.name;
-    tab.title = `${session.name} (${session.cwd || session.path || "default"})`;
+    tab.title = `${session.name} (${session.cwd || session.path || "default"})\nDrag to reorder`;
+    tab.setAttribute("draggable", "true");
 
     tab.innerHTML = `
       ${renderStatusIcon(isActive, notif)}
       <span class="tracking-tight truncate ${isActive ? "text-[#51afef]" : notif ? "text-[#DFDFDF]" : ""}">${session.name}</span>
       <button
         type="button"
+        draggable="false"
         title="Close session ${session.name}"
         aria-label="Close session ${session.name}"
         class="btn-tab-close p-0.5 rounded text-[#5B6268] hover:text-[#ff6c6b] hover:bg-[#ff6c6b]/15 active:bg-[#ff6c6b]/30 transition flex-shrink-0 cursor-pointer ml-1"
@@ -249,6 +302,74 @@ function renderDesktopTabs() {
         </svg>
       </button>
     `;
+
+    tab.addEventListener("dragstart", (e) => {
+      draggedSessionName = session.name;
+      e.dataTransfer.setData("text/plain", session.name);
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(() => {
+        tab.classList.add("opacity-40");
+      }, 0);
+    });
+
+    tab.addEventListener("dragend", () => {
+      draggedSessionName = null;
+      tab.classList.remove("opacity-40");
+      if (desktopTabsList) {
+        desktopTabsList.querySelectorAll(".session-tab").forEach((t) => {
+          t.classList.remove("border-l-2", "border-l-[#51afef]", "border-r-2", "border-r-[#51afef]");
+        });
+      }
+    });
+
+    tab.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!draggedSessionName || draggedSessionName === session.name) return;
+
+      const rect = tab.getBoundingClientRect();
+      const isBefore = e.clientX < rect.left + rect.width / 2;
+
+      if (isBefore) {
+        tab.classList.add("border-l-2", "border-l-[#51afef]");
+        tab.classList.remove("border-r-2", "border-r-[#51afef]");
+      } else {
+        tab.classList.add("border-r-2", "border-r-[#51afef]");
+        tab.classList.remove("border-l-2", "border-l-[#51afef]");
+      }
+    });
+
+    tab.addEventListener("dragleave", () => {
+      tab.classList.remove("border-l-2", "border-l-[#51afef]", "border-r-2", "border-r-[#51afef]");
+    });
+
+    tab.addEventListener("drop", (e) => {
+      e.preventDefault();
+      tab.classList.remove("border-l-2", "border-l-[#51afef]", "border-r-2", "border-r-[#51afef]");
+
+      const sourceName = draggedSessionName || e.dataTransfer.getData("text/plain");
+      const targetName = session.name;
+      if (!sourceName || sourceName === targetName) return;
+
+      const fromIndex = activeSessionsList.findIndex((s) => s.name === sourceName);
+      if (fromIndex === -1) return;
+
+      const rect = tab.getBoundingClientRect();
+      const isAfter = e.clientX >= rect.left + rect.width / 2;
+
+      const [movedItem] = activeSessionsList.splice(fromIndex, 1);
+      const toIndex = activeSessionsList.findIndex((s) => s.name === targetName);
+      if (toIndex === -1) {
+        activeSessionsList.push(movedItem);
+      } else if (isAfter) {
+        activeSessionsList.splice(toIndex + 1, 0, movedItem);
+      } else {
+        activeSessionsList.splice(toIndex, 0, movedItem);
+      }
+
+      saveCustomTabOrder(activeSessionsList.map((s) => s.name));
+      renderSessions();
+    });
 
     tab.addEventListener("click", (e) => {
       if (e.target.closest(".btn-tab-close")) return;
@@ -437,7 +558,7 @@ export function renderSessions() {
 }
 
 export function handleServerSessionsChanged(sessions) {
-  activeSessionsList = Array.isArray(sessions) ? sessions : [];
+  activeSessionsList = sortSessionsByCustomOrder(Array.isArray(sessions) ? sessions : []);
   pruneSessionNotifications(activeSessionsList.map((s) => s.name));
 
   if (drawerSessionCount) {
@@ -491,8 +612,8 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
   try {
     const data = await safeFetchJson("/api/sessions");
     const sessions = data.sessions || [];
-    activeSessionsList = sessions;
-    pruneSessionNotifications(sessions.map((s) => s.name));
+    activeSessionsList = sortSessionsByCustomOrder(sessions);
+    pruneSessionNotifications(activeSessionsList.map((s) => s.name));
 
     if (drawerSessionCount) {
       drawerSessionCount.textContent = String(activeSessionsList.length);

@@ -4,7 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
-import { switchRelativeSession } from "./sessions.js";
+import { switchRelativeSession, moveActiveSession } from "./sessions.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
@@ -417,6 +417,29 @@ export function initTerminal(onInput, onResize) {
         return;
       }
 
+      // Tab moving (reordering): Ctrl+Shift+PageUp or Alt+Shift+Left/PageUp (move left)
+      // and Ctrl+Shift+PageDown or Alt+Shift+Right/PageDown (move right)
+      const isMoveLeft =
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'PageUp' || e.code === 'PageUp')) ||
+        (e.altKey && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'PageUp' || e.code === 'PageUp'));
+      const isMoveRight =
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'PageDown' || e.code === 'PageDown')) ||
+        (e.altKey && e.shiftKey && (e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'PageDown' || e.code === 'PageDown'));
+
+      if (isMoveLeft) {
+        e.preventDefault();
+        e.stopPropagation();
+        moveActiveSession(-1);
+        return;
+      }
+
+      if (isMoveRight) {
+        e.preventDefault();
+        e.stopPropagation();
+        moveActiveSession(1);
+        return;
+      }
+
       const isC = e.key === 'C' || e.key === 'c' || e.code === 'KeyC' || e.keyCode === 67;
       const isV = e.key === 'V' || e.key === 'v' || e.code === 'KeyV' || e.keyCode === 86;
 
@@ -483,6 +506,31 @@ export function initTerminal(onInput, onResize) {
     if (isNextTab) {
       if (e.type === 'keydown') {
         switchRelativeSession(1);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    const isMoveLeft =
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'PageUp' || e.code === 'PageUp')) ||
+      (e.altKey && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'PageUp' || e.code === 'PageUp'));
+    const isMoveRight =
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'PageDown' || e.code === 'PageDown')) ||
+      (e.altKey && e.shiftKey && (e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'PageDown' || e.code === 'PageDown'));
+
+    if (isMoveLeft) {
+      if (e.type === 'keydown') {
+        moveActiveSession(-1);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    if (isMoveRight) {
+      if (e.type === 'keydown') {
+        moveActiveSession(1);
       }
       e.preventDefault();
       e.stopPropagation();
