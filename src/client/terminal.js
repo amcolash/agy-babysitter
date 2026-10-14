@@ -4,7 +4,11 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
-import { switchRelativeSession, moveActiveSession } from "./sessions.js";
+import { switchRelativeSession, moveActiveSession, terminateSession, closeDrawer } from "./sessions.js";
+import { getCurrentSession } from "./socket.js";
+import { openModal, closeModal } from "./modal.js";
+import { closeInputModal } from "./inputModal.js";
+import { closeSettingsModal } from "./settings.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
@@ -418,10 +422,93 @@ export function initTerminal(onInput, onResize) {
   document.addEventListener('selectionchange', updateSelectionFromAllSources);
   window.addEventListener('mouseup', updateSelectionFromAllSources);
 
+  let lastCloseTabTime = 0;
+  function handleCloseTabAction() {
+    const now = Date.now();
+    if (now - lastCloseTabTime < 250) return;
+    lastCloseTabTime = now;
+
+    // 1. Close New Session modal if open
+    const sessionModal = document.getElementById('modal-overlay');
+    if (sessionModal && !sessionModal.classList.contains('hidden')) {
+      closeModal();
+      return;
+    }
+
+    // 2. Close Settings modal if open
+    const settingsModal = document.getElementById('settings-modal-overlay');
+    if (settingsModal && !settingsModal.classList.contains('hidden')) {
+      closeSettingsModal();
+      return;
+    }
+
+    // 3. Close Input popup modal if open
+    const inputModal = document.getElementById('input-popup-overlay');
+    if (inputModal && !inputModal.classList.contains('hidden')) {
+      closeInputModal();
+      return;
+    }
+
+    // 4. Close mobile sessions drawer if open
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+    if (drawerBackdrop && drawerBackdrop.classList.contains('open')) {
+      closeDrawer();
+      return;
+    }
+
+    // 5. Otherwise terminate currently active session
+    const current = getCurrentSession();
+    if (current) {
+      terminateSession(current);
+    }
+  }
+
+  let lastNewTabTime = 0;
+  function handleNewTabAction() {
+    const now = Date.now();
+    if (now - lastNewTabTime < 250) return;
+    lastNewTabTime = now;
+
+    // Close any other open modals/drawers first
+    const settingsModal = document.getElementById('settings-modal-overlay');
+    if (settingsModal && !settingsModal.classList.contains('hidden')) {
+      closeSettingsModal();
+    }
+    const inputModal = document.getElementById('input-popup-overlay');
+    if (inputModal && !inputModal.classList.contains('hidden')) {
+      closeInputModal();
+    }
+    closeDrawer();
+
+    openModal();
+  }
+
   // Global window keydown interceptor in capture phase
   window.addEventListener(
     'keydown',
     (e) => {
+      const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
+      const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
+      const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
+      const isN = e.key === 'n' || e.key === 'N' || e.code === 'KeyN' || e.keyCode === 78;
+
+      const isCloseTab = isCtrlOrMeta && isW;
+      const isNewTab = isCtrlOrMeta && (isT || isN);
+
+      if (isCloseTab) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCloseTabAction();
+        return;
+      }
+
+      if (isNewTab) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleNewTabAction();
+        return;
+      }
+
       const activeTag = document.activeElement?.tagName;
       const isInsideOtherInput =
         (activeTag === 'INPUT' || activeTag === 'TEXTAREA') &&
@@ -506,8 +593,34 @@ export function initTerminal(onInput, onResize) {
     { capture: true }
   );
 
-  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
+  // Custom Key Event Handler for xterm (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
   term.attachCustomKeyEventHandler((e) => {
+    const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
+    const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
+    const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
+    const isN = e.key === 'n' || e.key === 'N' || e.code === 'KeyN' || e.keyCode === 78;
+
+    const isCloseTab = isCtrlOrMeta && isW;
+    const isNewTab = isCtrlOrMeta && (isT || isN);
+
+    if (isCloseTab) {
+      if (e.type === 'keydown') {
+        handleCloseTabAction();
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    if (isNewTab) {
+      if (e.type === 'keydown') {
+        handleNewTabAction();
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
     const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13;
     if (isEnter && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing) {
       if (e.type === 'keydown') {
@@ -603,6 +716,32 @@ export function initTerminal(onInput, onResize) {
 
     return true;
   });
+
+  // Prevent browser default on keyup for hijacked combinations (Ctrl+W, Ctrl+T, Ctrl+N)
+  window.addEventListener(
+    'keyup',
+    (e) => {
+      const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
+      const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
+      const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
+      const isN = e.key === 'n' || e.key === 'N' || e.code === 'KeyN' || e.keyCode === 78;
+      if (isCtrlOrMeta && (isW || isT || isN)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    { capture: true }
+  );
+
+  // When in fullscreen mode, lock keys so browser never handles Ctrl+W / Ctrl+N / Ctrl+T
+  if (typeof navigator !== 'undefined' && navigator.keyboard && typeof navigator.keyboard.lock === 'function') {
+    const tryLockKeys = () => {
+      if (document.fullscreenElement) {
+        navigator.keyboard.lock(['KeyW', 'KeyN', 'KeyT']).catch(() => {});
+      }
+    };
+    document.addEventListener('fullscreenchange', tryLockKeys);
+  }
 
   // Right-click custom context menu
   const contextMenu = document.getElementById('terminal-context-menu');

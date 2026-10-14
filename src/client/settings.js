@@ -107,6 +107,9 @@ export function openSettingsModal() {
 export function closeSettingsModal() {
   if (!modalOverlay) return;
   modalOverlay.classList.add('hidden');
+  if (!isMobileDevice() && term) {
+    term.focus();
+  }
 }
 
 function syncUiFromSettings() {

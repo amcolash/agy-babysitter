@@ -2,6 +2,7 @@ import { connectTerminal } from './socket.js';
 import { loadSessions, computeUniqueSessionName, getActiveSessions, switchToSession } from './sessions.js';
 import { showToast } from './toast.js';
 import { safeFetchJson } from './api.js';
+import { term, isMobileDevice } from './terminal.js';
 
 const modalOverlay = document.getElementById('modal-overlay');
 const btnOpenModal = document.getElementById('btn-open-modal');
@@ -111,11 +112,17 @@ export function openModal() {
   loadSessions();
   loadAllowedDirectories();
   loadRecentSessions();
-  newSessionNameInput.focus();
+  if (newSessionNameInput) {
+    newSessionNameInput.focus();
+    newSessionNameInput.select();
+  }
 }
 
 export function closeModal() {
   modalOverlay.classList.add('hidden');
+  if (!isMobileDevice() && term) {
+    term.focus();
+  }
 }
 
 export async function loadAllowedDirectories() {

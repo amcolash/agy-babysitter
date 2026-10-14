@@ -293,7 +293,7 @@ function renderDesktopTabs() {
       <button
         type="button"
         draggable="false"
-        title="Close session ${session.name}"
+        title="Close session ${session.name} (Ctrl+W)"
         aria-label="Close session ${session.name}"
         class="btn-tab-close p-0.5 rounded text-[#5B6268] hover:text-[#ff6c6b] hover:bg-[#ff6c6b]/15 active:bg-[#ff6c6b]/30 transition flex-shrink-0 cursor-pointer ml-1"
       >
@@ -440,7 +440,7 @@ function renderDrawerSessions() {
       </div>
       <button
         type="button"
-        title="Terminate session"
+        title="Terminate session (Ctrl+W)"
         aria-label="Terminate session ${session.name}"
         class="btn-kill-session p-1.5 rounded text-[#5B6268] hover:text-[#ff6c6b] hover:bg-[#ff6c6b]/10 active:bg-[#ff6c6b]/20 transition flex-shrink-0 cursor-pointer"
       >
