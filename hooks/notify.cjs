@@ -23,7 +23,19 @@ process.stdin.on('end', () => {
   const event = process.argv[2] || 'unknown';
   const workspacePath = payload.workspacePaths && payload.workspacePaths.length > 0 ? payload.workspacePaths[0] : (payload.cwd || null);
 
-  let sessionName = process.env.AGY_SESSION_NAME || process.env.TMUX_SESSION_NAME;
+  let sessionName = null;
+  // 1. First priority: Query tmux for the specific pane running this hook (immune to stale shell env vars)
+  if (process.env.TMUX_PANE) {
+    try {
+      const { execSync } = require('child_process');
+      const out = execSync(`tmux display-message -p -t "${process.env.TMUX_PANE}" "#S"`, { encoding: 'utf-8', timeout: 500 });
+      if (out && out.trim()) {
+        sessionName = out.trim();
+      }
+    } catch (e) {}
+  }
+
+  // 2. Second priority: Query tmux directly if TMUX socket exists
   if (!sessionName && process.env.TMUX) {
     try {
       const { execSync } = require('child_process');
@@ -33,8 +45,15 @@ process.stdin.on('end', () => {
       }
     } catch (e) {}
   }
+
+  // 3. Third priority: Workspace path directory name
   if (!sessionName && workspacePath) {
     sessionName = path.basename(workspacePath);
+  }
+
+  // 4. Fallback to environment variables if nothing else succeeded
+  if (!sessionName) {
+    sessionName = process.env.AGY_SESSION_NAME || process.env.TMUX_SESSION_NAME || null;
   }
 
   const postData = JSON.stringify({

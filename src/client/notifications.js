@@ -240,7 +240,14 @@ export function onSessionConnected(sessionName) {
   if (!sessionName) return;
   const state = getSessionState(sessionName);
   state.lastSnapshot = null;
+  state.focusedAt = Date.now();
   // Preserve notification state on connect so the bell remains visible until actual user interaction
+}
+
+export function onSessionFocused(sessionName) {
+  if (!sessionName) return;
+  const s = getSessionState(sessionName);
+  s.focusedAt = Date.now();
 }
 
 export function markTurnStarted(sessionName = null) {
@@ -261,6 +268,11 @@ export function handleUserInteraction() {
     if (s && s.notified !== null) {
       // Keep notification visible for at least 1000ms after arrival so user clearly sees it
       if (Date.now() - (s.notifiedAt || 0) < 1000) {
+        return;
+      }
+      // Must be focused for at least 1000ms before user interaction clears the notification
+      // (prevents the click that switches to the tab from clearing the notification badge)
+      if (s.focusedAt && Date.now() - s.focusedAt < 1000) {
         return;
       }
       clearSessionNotification(current);

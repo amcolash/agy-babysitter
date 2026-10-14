@@ -16,6 +16,7 @@ import {
   clearSessionNotification,
   setNotificationChangeCallback,
   pruneSessionNotifications,
+  onSessionFocused,
 } from "./notifications.js";
 
 const btnOpenDrawer = document.getElementById("btn-open-drawer");
@@ -96,6 +97,7 @@ export function switchToSession(sessionName) {
   clearReconnectTimer();
   syncSessionToStorageAndUrl(sessionName);
   connectTerminal(sessionName);
+  onSessionFocused(sessionName);
   renderSessions();
 }
 
@@ -251,10 +253,7 @@ function renderDesktopTabs() {
     tab.addEventListener("click", (e) => {
       if (e.target.closest(".btn-tab-close")) return;
       if (session.name !== getCurrentSession()) {
-        clearReconnectTimer();
-        syncSessionToStorageAndUrl(session.name);
-        connectTerminal(session.name);
-        renderSessions();
+        switchToSession(session.name);
       }
     });
 
@@ -474,6 +473,7 @@ export function handleServerSessionsChanged(sessions) {
       clearReconnectTimer();
       syncSessionToStorageAndUrl(nextSession);
       connectTerminal(nextSession);
+      onSessionFocused(nextSession);
     }
   } else {
     // Was in no-session state, but now sessions exist
@@ -481,6 +481,7 @@ export function handleServerSessionsChanged(sessions) {
     let target = savedSession && activeSessionsList.some((s) => s.name === savedSession) ? savedSession : activeSessionsList[0].name;
     syncSessionToStorageAndUrl(target);
     connectTerminal(target);
+    onSessionFocused(target);
   }
 
   renderSessions();
@@ -536,6 +537,7 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
     }
 
     syncSessionToStorageAndUrl(target);
+    onSessionFocused(target);
 
     if (autoConnect) {
       if (!getCurrentSession() || getCurrentSession() !== target) {
@@ -571,10 +573,7 @@ export function initSessions() {
       }
 
       if (sessionName !== getCurrentSession()) {
-        clearReconnectTimer();
-        syncSessionToStorageAndUrl(sessionName);
-        connectTerminal(sessionName);
-        renderSessions();
+        switchToSession(sessionName);
       }
     });
   }
@@ -594,10 +593,7 @@ export function initSessions() {
       }
 
       if (sessionName !== getCurrentSession()) {
-        clearReconnectTimer();
-        syncSessionToStorageAndUrl(sessionName);
-        connectTerminal(sessionName);
-        renderSessions();
+        switchToSession(sessionName);
       }
       closeDrawer();
     });

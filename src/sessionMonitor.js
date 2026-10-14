@@ -111,20 +111,35 @@ export function broadcastSessionNotification(session, state) {
 export function handleLifecycleHookEvent({ event, session, workspacePath, conversationId, toolCall }) {
   const currentSessions = listSessions();
   let targetSession = null;
+  const normalizedWp = workspacePath ? path.resolve(workspacePath) : null;
 
-  // 1. Check if passed session name matches an active tmux session
-  if (session && currentSessions.some((s) => s.name === session)) {
-    targetSession = session;
-  }
-  // 2. Check if workspacePath matches an active tmux session's cwd
-  if (!targetSession && workspacePath) {
-    const normalizedWp = path.resolve(workspacePath);
-    const matchedByCwd = currentSessions.find((s) => s.cwd && path.resolve(s.cwd) === normalizedWp);
-    if (matchedByCwd) {
-      targetSession = matchedByCwd.name;
+  // 1. Exact match: passed session name matches an active tmux session AND its cwd matches workspacePath
+  if (session) {
+    const sessionMatch = currentSessions.find((s) => s.name === session);
+    if (sessionMatch) {
+      if (!normalizedWp || (sessionMatch.cwd && path.resolve(sessionMatch.cwd) === normalizedWp)) {
+        targetSession = sessionMatch.name;
+      }
     }
   }
-  // 3. Fallback to passed session name
+
+  // 2. Match by workspacePath if session cwd was mismatched or session not found
+  if (!targetSession && normalizedWp) {
+    const cwdMatches = currentSessions.filter((s) => s.cwd && path.resolve(s.cwd) === normalizedWp);
+    if (cwdMatches.length === 1) {
+      targetSession = cwdMatches[0].name;
+    } else if (cwdMatches.length > 1) {
+      const exactNameMatch = cwdMatches.find((s) => s.name === session);
+      targetSession = exactNameMatch ? exactNameMatch.name : cwdMatches[0].name;
+    }
+  }
+
+  // 3. Fallback to passed session name if it exists in currentSessions
+  if (!targetSession && session && currentSessions.some((s) => s.name === session)) {
+    targetSession = session;
+  }
+
+  // 4. Final fallback to passed session name
   if (!targetSession && session) {
     targetSession = session;
   }
