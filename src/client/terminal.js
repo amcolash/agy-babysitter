@@ -387,9 +387,21 @@ export function initTerminal(onInput, onResize) {
   window.addEventListener(
     'keydown',
     (e) => {
-      // Tab switching: Ctrl+Shift+[ (prev) and Ctrl+Shift+] (next)
-      const isPrevTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '[' || e.key === '{' || e.code === 'BracketLeft');
-      const isNextTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === ']' || e.key === '}' || e.code === 'BracketRight');
+      const activeTag = document.activeElement?.tagName;
+      const isInsideOtherInput =
+        (activeTag === 'INPUT' || activeTag === 'TEXTAREA') &&
+        !document.activeElement.classList.contains('xterm-helper-textarea');
+      if (isInsideOtherInput) return;
+
+      // Tab switching: Ctrl+Shift+[ / ArrowLeft (prev) and Ctrl+Shift+] / ArrowRight (next)
+      const isPrevTab =
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === '[' || e.key === '{' || e.code === 'BracketLeft' || e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Up' || e.code === 'ArrowUp');
+      const isNextTab =
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === ']' || e.key === '}' || e.code === 'BracketRight' || e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Down' || e.code === 'ArrowDown');
 
       if (isPrevTab) {
         e.preventDefault();
@@ -408,12 +420,6 @@ export function initTerminal(onInput, onResize) {
       const isC = e.key === 'C' || e.key === 'c' || e.code === 'KeyC' || e.keyCode === 67;
       const isV = e.key === 'V' || e.key === 'v' || e.code === 'KeyV' || e.keyCode === 86;
 
-      const activeTag = document.activeElement?.tagName;
-      const isInsideOtherInput =
-        (activeTag === 'INPUT' || activeTag === 'TEXTAREA') &&
-        !document.activeElement.classList.contains('xterm-helper-textarea');
-      if (isInsideOtherInput) return;
-
       if (e.ctrlKey && e.shiftKey && isC) {
         e.preventDefault();
         e.stopPropagation();
@@ -431,10 +437,16 @@ export function initTerminal(onInput, onResize) {
     { capture: true }
   );
 
-  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/])
+  // Custom Key Event Handler for xterm (Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow)
   term.attachCustomKeyEventHandler((e) => {
-    const isPrevTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '[' || e.key === '{' || e.code === 'BracketLeft');
-    const isNextTab = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === ']' || e.key === '}' || e.code === 'BracketRight');
+    const isPrevTab =
+      (e.ctrlKey || e.metaKey) &&
+      e.shiftKey &&
+      (e.key === '[' || e.key === '{' || e.code === 'BracketLeft' || e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Up' || e.code === 'ArrowUp');
+    const isNextTab =
+      (e.ctrlKey || e.metaKey) &&
+      e.shiftKey &&
+      (e.key === ']' || e.key === '}' || e.code === 'BracketRight' || e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Down' || e.code === 'ArrowDown');
 
     if (isPrevTab) {
       if (e.type === 'keydown') {
