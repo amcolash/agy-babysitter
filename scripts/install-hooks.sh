@@ -52,11 +52,23 @@ hooks['agy-babysitter'] = {
   ],
   PreToolUse: [
     {
-      matcher: 'ask_question',
+      matcher: 'run_command|ask_question|write_to_file|replace_file_content',
       hooks: [
         {
           type: 'command',
-          command: 'node ${SHARE_DIR}/notify.cjs ask_question',
+          command: 'node ${SHARE_DIR}/notify.cjs pre_tool_use',
+          timeout: 2
+        }
+      ]
+    }
+  ],
+  PostToolUse: [
+    {
+      matcher: 'run_command|ask_question|write_to_file|replace_file_content',
+      hooks: [
+        {
+          type: 'command',
+          command: 'node ${SHARE_DIR}/notify.cjs post_tool_use',
           timeout: 2
         }
       ]

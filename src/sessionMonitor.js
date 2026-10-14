@@ -1,16 +1,99 @@
 import path from 'path';
+import { exec } from 'child_process';
 import { WebSocket } from 'ws';
 import { touchWakelock } from './wakelock.js';
 import { listSessions } from './tmuxManager.js';
+import { AUGMENTED_PATH } from './config.js';
 
 // Stores notification state per session: Map<sessionName, 'settled' | 'input' | null>
 const sessionStates = new Map();
+// Tracks consecutive misses when an 'input' state is active, to debounce clearing
+const pendingInputMisses = new Map();
 let wssInstance = null;
 let monitorInterval = null;
 let lastSessionsHash = '';
 
 function getSessionsSignature(sessions) {
   return sessions.map((s) => `${s.name}:${s.cwd}`).sort().join('|');
+}
+
+/**
+ * Pattern that detects Antigravity confirmation prompts or interactive questions
+ * in the visible terminal pane.
+ * @param {string} paneContent
+ * @returns {boolean}
+ */
+export function isPaneAwaitingConfirmation(paneContent) {
+  if (!paneContent || typeof paneContent !== 'string') return false;
+
+  // Inspect the bottom portion of the visible pane (last 30 lines) where prompts appear
+  const lines = paneContent.split('\n').slice(-30).join('\n');
+
+  // 1. Antigravity permission prompt headers
+  const hasPermissionHeader = /Requesting permission (?:for|to)/i.test(lines);
+
+  // 2. Specific permission questions
+  const hasPermissionQuestion = /(?:Run this command\?|Allow access to this (?:file|URL)\?|Allow calling this tool\?|Do you want to (?:run|proceed|continue)\?)/i.test(lines);
+
+  // 3. Choice options
+  const hasConfirmationChoices = /(?:(?:>|\s)\s*1\.\s*Yes|\bYes,\s*(?:run|allow|proceed)|\bNo,\s*cancel)/i.test(lines);
+
+  // 4. Keyboard navigation hints commonly shown in prompt modals
+  const hasNavigationHint = /(?:↑\/↓|Navigate\s*·)/i.test(lines);
+
+  // 5. Numbered menu choices (e.g. "> 1. " / "  2. ")
+  const hasMenuChoices = /(?:>|\s)\s*1\.\s+/i.test(lines);
+
+  // 6. Generic interactive CLI prompts (e.g. [y/n] or (Y/n))
+  const hasGenericPrompt = /(?:\[y\/n\]|\([yY]\/[nN]\))/i.test(lines);
+
+  // Condition A: Standard Antigravity tool permission prompt
+  if (hasPermissionHeader && (hasConfirmationChoices || hasPermissionQuestion || hasNavigationHint)) {
+    return true;
+  }
+
+  // Condition B: Direct confirmation question with choices or navigation
+  if (hasPermissionQuestion && (hasConfirmationChoices || hasNavigationHint)) {
+    return true;
+  }
+
+  // Condition C: Confirmation options with navigation hint
+  if (hasConfirmationChoices && hasNavigationHint) {
+    return true;
+  }
+
+  // Condition D: Interactive choice menu (e.g. ask_question prompt)
+  if (hasNavigationHint && hasMenuChoices) {
+    return true;
+  }
+
+  // Condition E: Generic CLI prompt
+  if (hasGenericPrompt) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks if a session's visible tmux pane is waiting for user confirmation or input
+ * @param {string} sessionName
+ * @returns {Promise<boolean>}
+ */
+export function checkSessionAwaitingInput(sessionName) {
+  return new Promise((resolve) => {
+    if (!sessionName) return resolve(false);
+    exec(
+      `tmux capture-pane -t "=${sessionName}:" -p`,
+      { encoding: 'utf-8', timeout: 500, env: { ...process.env, PATH: AUGMENTED_PATH } },
+      (err, stdout) => {
+        if (err || !stdout) {
+          return resolve(false);
+        }
+        resolve(isPaneAwaitingConfirmation(stdout));
+      }
+    );
+  });
 }
 
 /**
@@ -28,6 +111,7 @@ export function broadcastSessionsList(sessions = null) {
   for (const name of sessionStates.keys()) {
     if (!activeNames.has(name)) {
       sessionStates.delete(name);
+      pendingInputMisses.delete(name);
     }
   }
 
@@ -46,15 +130,39 @@ export function broadcastSessionsList(sessions = null) {
 }
 
 /**
- * Checks if tmux session list changed and broadcasts update if so
+ * Checks if tmux session list changed and inspects active sessions for permission prompts
  */
-export function checkSessionChanges() {
-  if (!wssInstance || wssInstance.clients.size === 0) return;
+export async function checkSessionChanges() {
   try {
     const currentSessions = listSessions();
     const signature = getSessionsSignature(currentSessions);
     if (signature !== lastSessionsHash) {
       broadcastSessionsList(currentSessions);
+    }
+
+    // Inspect active session panes for permission prompts / interactive menus
+    for (const session of currentSessions) {
+      const awaiting = await checkSessionAwaitingInput(session.name);
+      const currentState = sessionStates.get(session.name);
+
+      if (awaiting) {
+        pendingInputMisses.delete(session.name);
+        if (currentState !== 'input') {
+          sessionStates.set(session.name, 'input');
+          broadcastSessionNotification(session.name, 'input');
+        }
+      } else if (currentState === 'input') {
+        // Confirmation prompt disappeared: after 2 consecutive checks, clear input state
+        const misses = (pendingInputMisses.get(session.name) || 0) + 1;
+        pendingInputMisses.set(session.name, misses);
+        if (misses >= 2) {
+          pendingInputMisses.delete(session.name);
+          sessionStates.set(session.name, null);
+          broadcastSessionNotification(session.name, null);
+        }
+      } else {
+        pendingInputMisses.delete(session.name);
+      }
     }
   } catch (e) {}
 }
@@ -151,16 +259,51 @@ export function handleLifecycleHookEvent({ event, session, workspacePath, conver
 
   if (event === 'pre_invocation') {
     // Agent started thinking/working: clear notification state
+    pendingInputMisses.delete(targetSession);
     sessionStates.set(targetSession, null);
     broadcastSessionNotification(targetSession, null);
   } else if (event === 'stop') {
     // Agent finished turn: notify turn completed
+    pendingInputMisses.delete(targetSession);
     sessionStates.set(targetSession, 'settled');
     broadcastSessionNotification(targetSession, 'settled');
-  } else if (event === 'ask_question') {
-    // Agent is waiting for user confirmation or input
+  } else if (event === 'ask_question' || (event === 'pre_tool_use' && toolCall === 'ask_question')) {
+    // Agent is asking a question: user input is required
+    pendingInputMisses.delete(targetSession);
     sessionStates.set(targetSession, 'input');
     broadcastSessionNotification(targetSession, 'input');
+  } else if (event === 'pre_tool_use') {
+    // Agent called a tool (e.g. run_command, write_to_file) that might request permission.
+    // Check tmux pane for confirmation prompts quickly.
+    scheduleToolPermissionChecks(targetSession);
+  } else if (event === 'post_tool_use') {
+    // Tool completed: if session was in 'input' state, clear it
+    if (sessionStates.get(targetSession) === 'input') {
+      pendingInputMisses.delete(targetSession);
+      sessionStates.set(targetSession, null);
+      broadcastSessionNotification(targetSession, null);
+    }
+  }
+}
+
+/**
+ * Schedules fast pane checks following a pre_tool_use hook event
+ * @param {string} sessionName
+ */
+export function scheduleToolPermissionChecks(sessionName) {
+  if (!sessionName) return;
+  const delays = [100, 300, 700];
+  for (const delay of delays) {
+    setTimeout(async () => {
+      // Don't overwrite if session has already changed to another state (like 'settled')
+      if (sessionStates.get(sessionName) === 'settled') return;
+      const awaiting = await checkSessionAwaitingInput(sessionName);
+      if (awaiting && sessionStates.get(sessionName) !== 'input') {
+        pendingInputMisses.delete(sessionName);
+        sessionStates.set(sessionName, 'input');
+        broadcastSessionNotification(sessionName, 'input');
+      }
+    }, delay);
   }
 }
 
@@ -170,6 +313,7 @@ export function handleLifecycleHookEvent({ event, session, workspacePath, conver
  */
 export function markTurnStarted(sessionName) {
   if (!sessionName) return;
+  pendingInputMisses.delete(sessionName);
   sessionStates.set(sessionName, null);
   broadcastSessionNotification(sessionName, null);
 }
@@ -180,6 +324,7 @@ export function markTurnStarted(sessionName) {
  */
 export function clearNotification(sessionName) {
   if (!sessionName) return;
+  pendingInputMisses.delete(sessionName);
   const prevState = sessionStates.get(sessionName);
   sessionStates.set(sessionName, null);
   if (prevState) {
@@ -215,8 +360,8 @@ export function initSessionMonitor(wss) {
   if (monitorInterval) {
     clearInterval(monitorInterval);
   }
-  // Check tmux sessions every 1000ms to detect external creations/terminations/exits
-  monitorInterval = setInterval(checkSessionChanges, 1000);
+  // Check tmux sessions and prompt states every 750ms
+  monitorInterval = setInterval(checkSessionChanges, 750);
 }
 
 /**
@@ -228,6 +373,7 @@ export function stopSessionMonitor() {
     monitorInterval = null;
   }
   sessionStates.clear();
+  pendingInputMisses.clear();
   wssInstance = null;
 }
 
@@ -238,6 +384,9 @@ export default {
   checkSessionChanges,
   broadcastQuota,
   handleLifecycleHookEvent,
+  scheduleToolPermissionChecks,
+  checkSessionAwaitingInput,
+  isPaneAwaitingConfirmation,
   markTurnStarted,
   clearNotification,
   getAllNotificationStates
