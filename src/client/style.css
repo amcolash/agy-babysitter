@@ -270,6 +270,7 @@ html, body {
 
 #sessions-drawer {
   transform: translateX(-100%);
+  translate: none;
   visibility: hidden;
   pointer-events: none;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s, box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -278,6 +279,7 @@ html, body {
 
 #sessions-drawer.open {
   transform: translateX(0);
+  translate: none;
   visibility: visible;
   pointer-events: auto;
 }
