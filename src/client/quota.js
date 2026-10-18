@@ -138,10 +138,54 @@ function formatRelativeTime(resetIso) {
   return 'in <1m';
 }
 
+export function calculateDailyLeft(qwk, atTimestamp = Date.now()) {
+  const remainingFraction = qwk?.remaining_fraction ?? qwk?.remainingFraction;
+  const resetTime = qwk?.reset_time ?? qwk?.resetTime;
+
+  if (typeof remainingFraction !== 'number' || !resetTime || resetTime === 'null') {
+    return null;
+  }
+  const resetDate = new Date(resetTime);
+  if (isNaN(resetDate.getTime())) return null;
+
+  // start_dt = reset_dt - timedelta(days=7)
+  const startDate = new Date(resetDate.getTime() - 7 * 86400 * 1000);
+  const nowDate = new Date(atTimestamp);
+
+  // Difference in calendar dates in the local timezone (resets at midnight in local time)
+  const startLocalMidnight = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const nowLocalMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
+  const diffDays = Math.round((nowLocalMidnight.getTime() - startLocalMidnight.getTime()) / 86400000);
+
+  let dayNum = diffDays + 1;
+  if (dayNum > 7) dayNum = 7;
+  if (dayNum < 1) dayNum = 1;
+
+  const usedFraction = 1.0 - remainingFraction;
+  const usedDays = usedFraction * 7.0;
+
+  let dailyLeftDays = dayNum - usedDays;
+  const totalRemDays = remainingFraction * 7.0;
+  if (dailyLeftDays > totalRemDays) {
+    dailyLeftDays = totalRemDays;
+  }
+
+  const dailyPct = dailyLeftDays * 100.0;
+  return {
+    percentage: parseFloat(dailyPct.toFixed(2)),
+    remainingDays: parseFloat(dailyLeftDays.toFixed(2)),
+    dayNum
+  };
+}
+
 function tickQuotaTimes() {
   if (!currentQuota) return;
   if (currentQuota.quota7d?.resetTime) {
     currentQuota.quota7d.resetRelative = formatRelativeTime(currentQuota.quota7d.resetTime);
+    const newDaily = calculateDailyLeft(currentQuota.quota7d);
+    if (newDaily) {
+      currentQuota.dailyLeft = newDaily;
+    }
   }
   if (currentQuota.quota5h?.resetTime) {
     currentQuota.quota5h.resetRelative = formatRelativeTime(currentQuota.quota5h.resetTime);
@@ -167,5 +211,6 @@ export async function initQuota() {
 export default {
   initQuota,
   renderQuota,
-  handleServerQuota
+  handleServerQuota,
+  calculateDailyLeft
 };
