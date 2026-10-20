@@ -20,7 +20,7 @@ export function listSessions() {
       'tmux list-sessions -F "#{session_name}\t#{session_path}\t#{session_attached}\t#{session_created}" 2>/dev/null',
       { encoding: 'utf-8', env: { ...process.env, PATH: AUGMENTED_PATH } }
     );
-    return output
+    const list = output
       .trim()
       .split('\n')
       .filter(Boolean)
@@ -33,6 +33,15 @@ export function listSessions() {
           createdAt: (parseInt(createdAt, 10) || 0) * 1000
         };
       });
+
+    // Populate recent sessions cache with any active sessions
+    for (const s of list) {
+      if (s.name && s.cwd) {
+        addRecentSession({ name: s.name, cwd: s.cwd });
+      }
+    }
+
+    return list;
   } catch (e) {
     return [];
   }
@@ -163,7 +172,7 @@ export function createSession({ name = config.DEFAULT_SESSION, cwd, command } = 
     throw new Error(`Failed to create session '${sessionName}': tmux session terminated immediately.`);
   }
 
-  addRecentSession(sessionName, targetCwd);
+  addRecentSession({ name: sessionName, cwd: targetCwd, command: targetCommand });
 
   return { name: sessionName, cwd: targetCwd, created: true };
 }

@@ -53,7 +53,18 @@ export function saveRecentSessions(sessions) {
  * @param {string} [entry.command]
  * @returns {Array<Object>}
  */
-export function addRecentSession({ name, cwd, command = 'agy' }) {
+export function addRecentSession(entryOrName, maybeCwd, maybeCommand) {
+  let name, cwd, command;
+  if (typeof entryOrName === 'object' && entryOrName !== null) {
+    name = entryOrName.name;
+    cwd = entryOrName.cwd;
+    command = entryOrName.command;
+  } else {
+    name = entryOrName;
+    cwd = maybeCwd;
+    command = maybeCommand;
+  }
+
   if (!name || !cwd) return loadRecentSessions();
 
   const resolvedCwd = resolveTilde(cwd);
