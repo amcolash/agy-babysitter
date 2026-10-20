@@ -4,13 +4,13 @@ import { handleServerSessionsChanged, loadSessions } from './sessions.js';
 import { handleServerQuota } from './quota.js';
 import { setFabDisabled } from './actions.js';
 import { setInputModalEnabled } from './inputModal.js';
+import { clearAppCacheAndReload } from './settings.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
 const disconnectTitle = document.getElementById('disconnect-title');
 const disconnectSubtitle = document.getElementById('disconnect-subtitle');
 const btnRetryConnection = document.getElementById('btn-retry-connection');
-const btnReloadPage = document.getElementById('btn-reload-page');
 
 let ws = null;
 let currentSession = null;
@@ -19,27 +19,25 @@ let isServerUpdating = false;
 let isPollingForOnline = false;
 const RECONNECT_DELAY_MS = 2500;
 
-// Attach click listeners to all reload buttons
+// Attach click listeners to all reload buttons (Shift+Click triggers SW & cache wipe)
 document.querySelectorAll('.btn-status-reload, #btn-status-reload').forEach((btn) => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    window.location.reload();
+    if (e.shiftKey) {
+      clearAppCacheAndReload();
+    } else {
+      window.location.reload();
+    }
   });
 });
-
-if (btnReloadPage) {
-  btnReloadPage.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.location.reload();
-  });
-}
 
 if (btnRetryConnection) {
   btnRetryConnection.addEventListener('click', (e) => {
     e.preventDefault();
-    clearReconnectTimer();
-    if (currentSession) {
-      connectTerminal(currentSession);
+    if (e.shiftKey) {
+      clearAppCacheAndReload();
+    } else {
+      window.location.reload();
     }
   });
 }

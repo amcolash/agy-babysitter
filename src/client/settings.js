@@ -1,4 +1,5 @@
 import { term, handleTerminalResize, isMobileDevice, getSavedTerminalFontSize, saveTerminalFontSize } from './terminal.js';
+import { showToast } from './toast.js';
 
 const SETTINGS_KEY = 'agy_app_settings';
 
@@ -261,6 +262,59 @@ export function initSettings() {
     });
   }
 
+  // Clear Service Worker & App Cache
+  const btnClearSwCache = document.getElementById('btn-clear-sw-cache');
+  if (btnClearSwCache) {
+    btnClearSwCache.addEventListener('click', async () => {
+      btnClearSwCache.disabled = true;
+      btnClearSwCache.textContent = 'Clearing...';
+      try {
+        await clearAppCacheAndReload();
+      } catch (err) {
+        showToast(`Failed to clear cache: ${err.message}`, 'error');
+        btnClearSwCache.disabled = false;
+        btnClearSwCache.textContent = 'Clear & Reload';
+      }
+    });
+  }
+
   // Initial apply on boot
   applySettingsToTerminal();
+}
+
+/**
+ * Unregisters all Service Workers, deletes all CacheStorage caches, and hard reloads the page
+ */
+export async function clearAppCacheAndReload() {
+  showToast('Clearing Service Worker & Cache Storage...', 'info', 2000);
+
+  // 1. Unregister all service workers
+  if ('serviceWorker' in navigator) {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((r) => r.unregister()));
+    } catch (e) {
+      console.warn('Failed to unregister service workers:', e);
+    }
+  }
+
+  // 2. Clear all CacheStorage
+  if ('caches' in window) {
+    try {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((name) => caches.delete(name)));
+    } catch (e) {
+      console.warn('Failed to delete caches:', e);
+    }
+  }
+
+  // 3. Clear session storage
+  try {
+    sessionStorage.clear();
+  } catch (e) {}
+
+  // 4. Force reload from server, bypassing browser cache with cache-busting timestamp
+  const url = new URL(window.location.href);
+  url.searchParams.set('_sw_bust', Date.now().toString());
+  window.location.replace(url.toString());
 }

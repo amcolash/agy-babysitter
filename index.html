@@ -303,20 +303,13 @@
           <p id="disconnect-subtitle" class="text-xs text-[#5B6268] max-w-xs mb-5">
             Reconnecting to agy-babysitter automatically...
           </p>
-          <div class="flex items-center gap-2.5">
+          <div class="flex items-center justify-center">
             <button
               id="btn-retry-connection"
               type="button"
-              class="px-4 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
+              class="px-5 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
             >
-              Retry
-            </button>
-            <button
-              id="btn-reload-page"
-              type="button"
-              class="px-4 py-2 rounded-lg bg-[#282c34] hover:bg-[#21242b] border border-[#3f444a] text-[#bbc2cf] hover:text-[#DFDFDF] text-xs font-bold transition duration-150 cursor-pointer"
-            >
-              Reload
+              Refresh
             </button>
           </div>
         </div>
@@ -798,6 +791,24 @@
                   <option value="Menlo, Monaco, Consolas, monospace">Menlo / Monaco / Consolas</option>
                   <option value="ui-monospace, monospace">System Monospace</option>
                 </select>
+              </div>
+            </div>
+
+            <!-- Section: Maintenance & Storage -->
+            <div class="space-y-3 pt-3 border-t border-[#3f444a]">
+              <h4 class="text-[11px] font-bold uppercase tracking-wider text-[#5B6268]">Maintenance & Cache</h4>
+              <div class="flex items-center justify-between p-2.5 rounded-lg bg-[#1b2229] border border-[#3f444a]">
+                <div class="flex flex-col pr-2">
+                  <span class="text-xs font-bold text-[#DFDFDF]">Clear App Cache & Reload</span>
+                  <span class="text-[11px] text-[#5B6268]">Unregisters Service Worker, wipes Cache Storage, and hard reloads</span>
+                </div>
+                <button
+                  type="button"
+                  id="btn-clear-sw-cache"
+                  class="shrink-0 px-2.5 py-1.5 rounded-md bg-[#21242b] hover:bg-[#ff6c6b]/20 active:bg-[#ff6c6b]/30 border border-[#3f444a] hover:border-[#ff6c6b] text-[#ff6c6b] text-xs font-bold transition duration-150 cursor-pointer"
+                >
+                  Clear & Reload
+                </button>
               </div>
             </div>
           </div>
