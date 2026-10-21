@@ -70,9 +70,9 @@ export function addRecentSession(entryOrName, maybeCwd, maybeCommand) {
   const resolvedCwd = resolveTilde(cwd);
   const currentList = loadRecentSessions();
 
-  // Deduplicate by name OR by cwd
+  // Deduplicate by cwd (only track the most recent session/entry per folder)
   const filtered = currentList.filter(
-    (item) => item.name !== name && item.cwd !== resolvedCwd
+    (item) => item.cwd !== resolvedCwd
   );
 
   const newEntry = {
@@ -96,14 +96,20 @@ export function addRecentSession(entryOrName, maybeCwd, maybeCommand) {
 export function getRecentSessions(limit = 5) {
   const list = loadRecentSessions();
 
-  // Only keep sessions whose directories still exist
-  const validList = list.filter((item) => {
+  // Only keep sessions whose directories still exist and deduplicate by cwd
+  const seenCwds = new Set();
+  const validList = [];
+  for (const item of list) {
+    if (!item.cwd || seenCwds.has(item.cwd)) continue;
     try {
-      return fs.existsSync(item.cwd);
+      if (fs.existsSync(item.cwd)) {
+        seenCwds.add(item.cwd);
+        validList.push(item);
+      }
     } catch {
-      return false;
+      // Ignore filesystem access errors
     }
-  });
+  }
 
   return validList.slice(0, limit).map((s) => ({
     ...s,

@@ -51,21 +51,22 @@ export async function loadRecentSessions() {
 
     recentSessionsList.innerHTML = '';
     recent.forEach((session) => {
+      const folderBase = session.cwd.split('/').filter(Boolean).pop() || session.name || 'folder';
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className =
         'recent-session-chip group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#1b2229] hover:bg-[#282c34] border border-[#3f444a] hover:border-[#51afef] transition duration-150 text-left cursor-pointer active:scale-95';
-      chip.title = `${session.name} (${session.cwd}) [${session.command || 'agy'}]`;
+      chip.title = `${folderBase} (${session.cwd})`;
       chip.innerHTML = `
         <span class="text-sm text-[#51afef]">📁</span>
         <div class="flex flex-col min-w-0">
-          <span class="text-xs font-bold text-[#DFDFDF] group-hover:text-[#51afef] truncate">${session.name}</span>
+          <span class="text-xs font-bold text-[#DFDFDF] group-hover:text-[#51afef] truncate">${folderBase}</span>
           <span class="text-[10px] text-[#5B6268] font-mono truncate max-w-[140px] sm:max-w-[200px]">${session.displayPath || session.cwd}</span>
         </div>
       `;
 
       chip.addEventListener('click', () => {
-        applyRecentSession(session);
+        applyRecentFolder(session);
       });
 
       recentSessionsList.appendChild(chip);
@@ -77,13 +78,13 @@ export async function loadRecentSessions() {
   }
 }
 
-function applyRecentSession(session) {
-  const folderBase = session.cwd.split('/').filter(Boolean).pop() || session.name;
-  setSelectedCwd(session.cwd, session.displayPath || session.cwd, folderBase);
+function applyRecentFolder(folderEntry) {
+  const folderBase = folderEntry.cwd.split('/').filter(Boolean).pop() || folderEntry.name || 'session';
+  setSelectedCwd(folderEntry.cwd, folderEntry.displayPath || folderEntry.cwd, folderBase);
 
   if (allowedRoots && allowedRoots.length > 0) {
     const rootIdx = allowedRoots.findIndex((r) =>
-      (r.folders || []).some((f) => f.path === session.cwd)
+      (r.folders || []).some((f) => f.path === folderEntry.cwd)
     );
     if (rootIdx !== -1) {
       activeRootIndex = rootIdx;
@@ -92,14 +93,9 @@ function applyRecentSession(session) {
     }
   }
 
-  const activeNames = getActiveSessions().map((s) => s.name);
-  if (activeNames.includes(session.name)) {
-    newSessionNameInput.value = computeUniqueSessionName(session.name);
-  } else {
-    newSessionNameInput.value = session.name;
+  if (folderEntry.command) {
+    newSessionCommandInput.value = folderEntry.command;
   }
-
-  newSessionCommandInput.value = session.command || 'agy';
   newSessionNameInput.focus();
 }
 
