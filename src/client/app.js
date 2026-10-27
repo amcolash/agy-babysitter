@@ -7,6 +7,7 @@ import { initActions } from './actions.js';
 import { initNotifications } from './notifications.js';
 import { initSettings } from './settings.js';
 import { initQuota } from './quota.js';
+import { initDiscoveryUI, scheduleAutoScan } from './discoveryUI.js';
 
 import { registerSW } from 'virtual:pwa-register';
 
@@ -18,6 +19,7 @@ initSessions();
 initModal();
 initInputModal();
 initActions();
+initDiscoveryUI();
 
 // Auto-updating PWA service worker
 if (import.meta.env.PROD) {
@@ -26,7 +28,12 @@ if (import.meta.env.PROD) {
 
 // Boot application data & initial session connection
 (async function boot() {
-  await initInfo();
-  await initQuota();
-  await loadSessions();
+  try {
+    await initInfo();
+    await initQuota();
+    await loadSessions();
+  } catch (err) {
+    // If initial boot fails (e.g. app opened offline without tunnel), trigger local network scan immediately!
+    scheduleAutoScan(true);
+  }
 })();

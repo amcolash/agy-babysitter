@@ -5,6 +5,7 @@ import { handleServerQuota } from './quota.js';
 import { setFabDisabled } from './actions.js';
 import { setInputModalEnabled } from './inputModal.js';
 import { clearAppCacheAndReload } from './settings.js';
+import { scheduleAutoScan, clearAutoScanTimer, resetDiscoveryState } from './discoveryUI.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -62,6 +63,11 @@ export function showDisconnectedOverlay(title, subtitle) {
   disconnectedOverlay.classList.remove('hidden');
   updateStatus('disconnected', title || 'Connecting to Server...');
 
+  // Start background local network scan if not in the middle of server updating
+  if (!isServerUpdating) {
+    scheduleAutoScan(false);
+  }
+
   setFabDisabled(true);
   setTerminalInputEnabled(false);
   setInputModalEnabled(false);
@@ -103,6 +109,7 @@ export function clearDisconnectedOverlayTimer() {
 
 export function hideDisconnectedOverlay() {
   clearDisconnectedOverlayTimer();
+  resetDiscoveryState();
   if (disconnectedOverlay) {
     disconnectedOverlay.classList.add('hidden');
   }

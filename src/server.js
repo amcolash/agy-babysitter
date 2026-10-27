@@ -8,6 +8,7 @@ import directoriesRouter, { formatDisplayPath } from './routes/directories.js';
 import sessionsRouter from './routes/sessions.js';
 import hooksRouter from './routes/hooks.js';
 import quotaRouter from './routes/quota.js';
+import discoveryRouter from './routes/discovery.js';
 import { setupWebSocketServer, setupAssetWatcher, broadcastServerRestart } from './websocket.js';
 import { stopAllWakelocks } from './wakelock.js';
 import { initSessionMonitor, stopSessionMonitor } from './sessionMonitor.js';
@@ -50,6 +51,10 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || 'Content-Type, Authorization');
   }
+  // Allow Chrome Private Network Access (PNA) preflights from local/tunnel clients
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
@@ -69,6 +74,7 @@ app.use('/api', directoriesRouter);
 app.use('/api', sessionsRouter);
 app.use('/api', hooksRouter);
 app.use('/api', quotaRouter);
+app.use('/api', discoveryRouter);
 
 // SPA fallback route
 app.get('{*path}', (req, res, next) => {

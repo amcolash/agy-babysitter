@@ -288,11 +288,11 @@
         <!-- Server Disconnected / Updating State Overlay -->
         <div
           id="server-disconnected-state"
-          class="hidden absolute inset-0 bg-[#1b2229]/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-35 select-none"
+          class="hidden absolute inset-0 bg-[#1b2229]/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-35 select-none overflow-y-auto"
         >
           <div
             id="disconnect-icon-box"
-            class="w-14 h-14 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#51afef] shadow-lg shadow-black/40"
+            class="w-14 h-14 rounded-2xl bg-[#21242b] border border-[#3f444a] flex items-center justify-center mb-4 text-[#51afef] shadow-lg shadow-black/40 shrink-0"
           >
             <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -300,16 +300,59 @@
             </svg>
           </div>
           <h3 id="disconnect-title" class="text-base font-bold text-[#DFDFDF] mb-1">Connecting to Server...</h3>
-          <p id="disconnect-subtitle" class="text-xs text-[#5B6268] max-w-xs mb-5">
+          <p id="disconnect-subtitle" class="text-xs text-[#5B6268] max-w-xs mb-4">
             Reconnecting to agy-babysitter automatically...
           </p>
-          <div class="flex items-center justify-center">
+
+          <!-- Local Network Discovery Section -->
+          <div id="local-discovery-container" class="w-full max-w-xs mb-4 space-y-2 text-left">
+            <!-- Scanning Progress Box -->
+            <div id="local-scan-status-box" class="hidden p-3 rounded-xl bg-[#21242b] border border-[#3f444a] flex items-center gap-3">
+              <div class="w-4 h-4 rounded-full border-2 border-[#51afef] border-t-transparent animate-spin shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="text-[11px] font-bold text-[#DFDFDF]" id="local-scan-status-title">Scanning local network...</div>
+                <div class="text-[10px] text-[#5B6268] truncate" id="local-scan-status-subtitle">Checking common subnets</div>
+              </div>
+            </div>
+
+            <!-- Discovered Local Server Alert -->
+            <div id="local-server-found-box" class="hidden p-3 rounded-xl bg-[#98be65]/10 border border-[#98be65]/40 flex flex-col gap-2">
+              <div class="flex items-center gap-2 text-[#98be65]">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span class="text-xs font-bold" id="local-server-found-title">Local Server Found</span>
+              </div>
+              <p class="text-[11px] text-[#DFDFDF]" id="local-server-found-desc">
+                Found agy-babysitter running on local Wi-Fi.
+              </p>
+              <button
+                type="button"
+                id="btn-connect-local-server"
+                class="w-full py-2 px-3 rounded-lg bg-[#98be65] hover:bg-[#a6d170] active:bg-[#7ba04f] text-[#1b2229] text-xs font-bold transition shadow-sm cursor-pointer text-center"
+              >
+                Connect to Local Server
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center gap-2.5">
             <button
               id="btn-retry-connection"
               type="button"
-              class="px-5 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
+              class="px-4 py-2 rounded-lg bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
             >
               Refresh
+            </button>
+            <button
+              id="btn-open-scan-modal"
+              type="button"
+              class="px-4 py-2 rounded-lg bg-[#21242b] hover:bg-[#3f444a] text-[#DFDFDF] border border-[#3f444a] text-xs font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer flex items-center gap-1.5"
+            >
+              <svg class="w-3.5 h-3.5 text-[#51afef]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span>Scan Network</span>
             </button>
           </div>
         </div>
@@ -821,6 +864,128 @@
               class="px-4 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs md:text-sm font-bold transition duration-150 shadow-md shadow-black/40 cursor-pointer"
             >
               Done
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Network Scan & Local Connect Modal -->
+      <div
+        id="scan-modal-overlay"
+        class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      >
+        <div
+          class="modal bg-[#21242b] border border-[#3f444a] rounded-xl p-5 w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl shadow-black/60"
+        >
+          <!-- Modal Header -->
+          <div class="modal-header flex items-center justify-between pb-3 mb-3 border-b border-[#3f444a]">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-[#51afef]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <h3 class="text-sm md:text-base font-bold text-[#DFDFDF]">Scan Local Network</h3>
+            </div>
+            <button
+              type="button"
+              id="btn-close-scan-modal"
+              class="text-[#5B6268] hover:text-[#DFDFDF] transition p-1 cursor-pointer"
+              aria-label="Close scan modal"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Modal Body -->
+          <div class="modal-body overflow-y-auto space-y-4 py-1 flex-1 text-xs">
+            <p class="text-[#bbc2cf]">
+              Scan your local Wi-Fi network (Airbnb, friend's house, or coffee shop) to find your agy-babysitter server.
+            </p>
+
+            <!-- Direct Connect Input -->
+            <div class="space-y-1.5 p-3 rounded-lg bg-[#1b2229] border border-[#3f444a]">
+              <label for="input-direct-ip" class="block font-bold text-[#DFDFDF]">Direct IP / Hostname Connect</label>
+              <div class="flex gap-2">
+                <input
+                  type="text"
+                  id="input-direct-ip"
+                  placeholder="e.g. 192.168.1.50:8080"
+                  class="flex-1 bg-[#21242b] border border-[#3f444a] focus:border-[#51afef] rounded-md px-3 py-1.5 text-xs text-[#DFDFDF] outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  id="btn-direct-connect"
+                  class="px-3 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] font-bold transition cursor-pointer"
+                >
+                  Connect
+                </button>
+              </div>
+            </div>
+
+            <!-- Custom Subnet Input -->
+            <div class="space-y-1.5 p-3 rounded-lg bg-[#1b2229] border border-[#3f444a]">
+              <label for="input-custom-subnet" class="block font-bold text-[#DFDFDF]">Custom Subnet Range</label>
+              <div class="flex gap-2 items-center">
+                <input
+                  type="text"
+                  id="input-custom-subnet"
+                  placeholder="e.g. 192.168.50"
+                  class="flex-1 bg-[#21242b] border border-[#3f444a] focus:border-[#51afef] rounded-md px-3 py-1.5 text-xs text-[#DFDFDF] outline-none font-mono"
+                />
+                <span class="text-[#5B6268] font-mono">.*</span>
+                <button
+                  type="button"
+                  id="btn-start-manual-scan"
+                  class="px-3 py-1.5 rounded-md bg-[#21242b] hover:bg-[#3f444a] border border-[#3f444a] text-[#DFDFDF] font-bold transition cursor-pointer"
+                >
+                  Scan Range
+                </button>
+              </div>
+            </div>
+
+            <!-- Known / Saved Servers List -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-[#5B6268]">Known Local Servers</span>
+                <button type="button" id="btn-clear-known-servers" class="text-[10px] text-[#5B6268] hover:text-[#ff6c6b] transition cursor-pointer">Clear History</button>
+              </div>
+              <div id="known-servers-list" class="space-y-1.5 max-h-36 overflow-y-auto">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Active Scan Status Banner inside Modal -->
+            <div id="modal-scan-status-box" class="hidden p-3 rounded-lg bg-[#1b2229] border border-[#51afef]/40 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-3.5 h-3.5 rounded-full border-2 border-[#51afef] border-t-transparent animate-spin shrink-0"></div>
+                <span class="text-xs text-[#DFDFDF]" id="modal-scan-status-text">Scanning subnet...</span>
+              </div>
+              <button
+                type="button"
+                id="btn-cancel-scan"
+                class="text-xs text-[#ff6c6b] hover:underline cursor-pointer font-bold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="modal-actions flex items-center justify-between pt-3 mt-3 border-t border-[#3f444a]">
+            <button
+              type="button"
+              id="btn-scan-all-common"
+              class="px-3 py-1.5 rounded-md bg-[#21242b] hover:bg-[#3f444a] border border-[#3f444a] text-[#DFDFDF] text-xs font-bold transition cursor-pointer"
+            >
+              Scan Common Subnets
+            </button>
+            <button
+              type="button"
+              id="btn-done-scan-modal"
+              class="px-4 py-1.5 rounded-md bg-[#51afef] hover:bg-[#46D9FF] active:bg-[#2257a0] text-[#1b2229] text-xs font-bold transition cursor-pointer"
+            >
+              Close
             </button>
           </div>
         </div>
