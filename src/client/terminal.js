@@ -4,7 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
-import { switchRelativeSession, moveActiveSession, terminateSession, closeDrawer } from "./sessions.js";
+import { switchRelativeSession, switchToNextNotifiedSession, moveActiveSession, terminateSession, closeDrawer } from "./sessions.js";
 import { getCurrentSession } from "./socket.js";
 import { openModal, closeModal } from "./modal.js";
 import { closeInputModal } from "./inputModal.js";
@@ -483,6 +483,17 @@ export function initTerminal(onInput, onResize) {
     openModal();
   }
 
+  let lastNotifSwitchTime = 0;
+  function handleNextNotifiedSessionAction() {
+    const now = Date.now();
+    if (now - lastNotifSwitchTime < 150) return;
+    lastNotifSwitchTime = now;
+    const switched = switchToNextNotifiedSession();
+    if (switched) {
+      closeDrawer();
+    }
+  }
+
   // Global window keydown interceptor in capture phase
   window.addEventListener(
     'keydown',
@@ -536,6 +547,17 @@ export function initTerminal(onInput, onResize) {
         e.preventDefault();
         e.stopPropagation();
         switchRelativeSession(1);
+        return;
+      }
+
+      // Next tab with notification: Ctrl+Shift+Tab
+      const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
+      const isNextNotifTab = isCtrlOrMeta && e.shiftKey && isTab;
+
+      if (isNextNotifTab) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleNextNotifiedSessionAction();
         return;
       }
 
@@ -660,6 +682,18 @@ export function initTerminal(onInput, onResize) {
       return false;
     }
 
+    const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
+    const isNextNotifTab = isCtrlOrMeta && e.shiftKey && isTab;
+
+    if (isNextNotifTab) {
+      if (e.type === 'keydown') {
+        handleNextNotifiedSessionAction();
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
     const isMoveLeft =
       ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'PageUp' || e.code === 'PageUp')) ||
       (e.altKey && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'PageUp' || e.code === 'PageUp'));
@@ -717,7 +751,7 @@ export function initTerminal(onInput, onResize) {
     return true;
   });
 
-  // Prevent browser default on keyup for hijacked combinations (Ctrl+W, Ctrl+T, Ctrl+N)
+  // Prevent browser default on keyup for hijacked combinations (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Shift+Tab)
   window.addEventListener(
     'keyup',
     (e) => {
@@ -725,7 +759,8 @@ export function initTerminal(onInput, onResize) {
       const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
       const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
       const isN = e.key === 'n' || e.key === 'N' || e.code === 'KeyN' || e.keyCode === 78;
-      if (isCtrlOrMeta && (isW || isT || isN)) {
+      const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
+      if (isCtrlOrMeta && (isW || isT || isN || (e.shiftKey && isTab))) {
         e.preventDefault();
         e.stopPropagation();
       }
@@ -733,11 +768,11 @@ export function initTerminal(onInput, onResize) {
     { capture: true }
   );
 
-  // When in fullscreen mode, lock keys so browser never handles Ctrl+W / Ctrl+N / Ctrl+T
+  // When in fullscreen mode, lock keys so browser never handles Ctrl+W / Ctrl+N / Ctrl+T / Tab
   if (typeof navigator !== 'undefined' && navigator.keyboard && typeof navigator.keyboard.lock === 'function') {
     const tryLockKeys = () => {
       if (document.fullscreenElement) {
-        navigator.keyboard.lock(['KeyW', 'KeyN', 'KeyT']).catch(() => {});
+        navigator.keyboard.lock(['KeyW', 'KeyN', 'KeyT', 'Tab']).catch(() => {});
       }
     };
     document.addEventListener('fullscreenchange', tryLockKeys);

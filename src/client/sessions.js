@@ -153,6 +153,35 @@ export function switchRelativeSession(direction) {
   }
 }
 
+export function switchToNextNotifiedSession() {
+  if (!activeSessionsList || activeSessionsList.length <= 1) return false;
+  const current = getCurrentSession();
+  const currentIndex = activeSessionsList.findIndex((s) => s.name === current);
+  const total = activeSessionsList.length;
+
+  if (currentIndex === -1) {
+    for (let i = 0; i < total; i++) {
+      const session = activeSessionsList[i];
+      if (session && getSessionNotification(session.name)) {
+        switchToSession(session.name);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (let offset = 1; offset < total; offset++) {
+    const checkIndex = (currentIndex + offset) % total;
+    const session = activeSessionsList[checkIndex];
+    if (session && getSessionNotification(session.name)) {
+      switchToSession(session.name);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function moveActiveSession(direction) {
   if (!activeSessionsList || activeSessionsList.length <= 1) return;
   const current = getCurrentSession();
