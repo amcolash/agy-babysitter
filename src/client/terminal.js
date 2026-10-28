@@ -484,11 +484,11 @@ export function initTerminal(onInput, onResize) {
   }
 
   let lastNotifSwitchTime = 0;
-  function handleNextNotifiedSessionAction() {
+  function handleNextNotifiedSessionAction(direction = 1) {
     const now = Date.now();
     if (now - lastNotifSwitchTime < 150) return;
     lastNotifSwitchTime = now;
-    const switched = switchToNextNotifiedSession();
+    const switched = switchToNextNotifiedSession(direction);
     if (switched) {
       closeDrawer();
     }
@@ -550,14 +550,14 @@ export function initTerminal(onInput, onResize) {
         return;
       }
 
-      // Next tab with notification: Ctrl+Shift+Tab
+      // Notification tab cycling: Ctrl+Tab (forward) and Ctrl+Shift+Tab (backward)
       const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
-      const isNextNotifTab = isCtrlOrMeta && e.shiftKey && isTab;
+      const isNotifTab = isCtrlOrMeta && isTab;
 
-      if (isNextNotifTab) {
+      if (isNotifTab) {
         e.preventDefault();
         e.stopPropagation();
-        handleNextNotifiedSessionAction();
+        handleNextNotifiedSessionAction(e.shiftKey ? -1 : 1);
         return;
       }
 
@@ -615,7 +615,7 @@ export function initTerminal(onInput, onResize) {
     { capture: true }
   );
 
-  // Custom Key Event Handler for xterm (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
+  // Custom Key Event Handler for xterm (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
   term.attachCustomKeyEventHandler((e) => {
     const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
     const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
@@ -682,12 +682,13 @@ export function initTerminal(onInput, onResize) {
       return false;
     }
 
+    // Notification tab cycling: Ctrl+Tab (forward) and Ctrl+Shift+Tab (backward)
     const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
-    const isNextNotifTab = isCtrlOrMeta && e.shiftKey && isTab;
+    const isNotifTab = isCtrlOrMeta && isTab;
 
-    if (isNextNotifTab) {
+    if (isNotifTab) {
       if (e.type === 'keydown') {
-        handleNextNotifiedSessionAction();
+        handleNextNotifiedSessionAction(e.shiftKey ? -1 : 1);
       }
       e.preventDefault();
       e.stopPropagation();
@@ -751,7 +752,7 @@ export function initTerminal(onInput, onResize) {
     return true;
   });
 
-  // Prevent browser default on keyup for hijacked combinations (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Shift+Tab)
+  // Prevent browser default on keyup for hijacked combinations (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+Shift+Tab)
   window.addEventListener(
     'keyup',
     (e) => {
@@ -760,7 +761,7 @@ export function initTerminal(onInput, onResize) {
       const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
       const isN = e.key === 'n' || e.key === 'N' || e.code === 'KeyN' || e.keyCode === 78;
       const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
-      if (isCtrlOrMeta && (isW || isT || isN || (e.shiftKey && isTab))) {
+      if (isCtrlOrMeta && (isW || isT || isN || isTab)) {
         e.preventDefault();
         e.stopPropagation();
       }

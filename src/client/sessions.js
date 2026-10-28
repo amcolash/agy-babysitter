@@ -153,14 +153,17 @@ export function switchRelativeSession(direction) {
   }
 }
 
-export function switchToNextNotifiedSession() {
+export function switchToNextNotifiedSession(direction = 1) {
   if (!activeSessionsList || activeSessionsList.length <= 1) return false;
   const current = getCurrentSession();
   const currentIndex = activeSessionsList.findIndex((s) => s.name === current);
   const total = activeSessionsList.length;
+  const step = direction >= 0 ? 1 : -1;
 
   if (currentIndex === -1) {
-    for (let i = 0; i < total; i++) {
+    const start = step === 1 ? 0 : total - 1;
+    const end = step === 1 ? total : -1;
+    for (let i = start; step === 1 ? i < end : i > end; i += step) {
       const session = activeSessionsList[i];
       if (session && getSessionNotification(session.name)) {
         switchToSession(session.name);
@@ -171,7 +174,7 @@ export function switchToNextNotifiedSession() {
   }
 
   for (let offset = 1; offset < total; offset++) {
-    const checkIndex = (currentIndex + offset) % total;
+    const checkIndex = ((currentIndex + offset * step) % total + total) % total;
     const session = activeSessionsList[checkIndex];
     if (session && getSessionNotification(session.name)) {
       switchToSession(session.name);
