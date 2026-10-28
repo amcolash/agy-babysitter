@@ -4,7 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
-import { switchRelativeSession, switchToNextNotifiedSession, moveActiveSession, terminateSession, closeDrawer } from "./sessions.js";
+import { switchRelativeSession, switchToNextNotifiedSession, moveActiveSession, terminateSession, closeDrawer, closeLabelModal, closeTabContextMenu } from "./sessions.js";
 import { getCurrentSession } from "./socket.js";
 import { openModal, closeModal } from "./modal.js";
 import { closeInputModal } from "./inputModal.js";
@@ -449,14 +449,21 @@ export function initTerminal(onInput, onResize) {
       return;
     }
 
-    // 4. Close mobile sessions drawer if open
+    // 4. Close Label modal if open
+    const labelModal = document.getElementById('label-modal-overlay');
+    if (labelModal && !labelModal.classList.contains('hidden')) {
+      closeLabelModal();
+      return;
+    }
+
+    // 5. Close mobile sessions drawer if open
     const drawerBackdrop = document.getElementById('drawer-backdrop');
     if (drawerBackdrop && drawerBackdrop.classList.contains('open')) {
       closeDrawer();
       return;
     }
 
-    // 5. Otherwise terminate currently active session
+    // 6. Otherwise terminate currently active session
     const current = getCurrentSession();
     if (current) {
       terminateSession(current);
@@ -795,6 +802,7 @@ export function initTerminal(onInput, onResize) {
     e.preventDefault();
     if (!contextMenu) return;
 
+    closeTabContextMenu();
     updateSelectionFromAllSources();
 
     // Position menu near cursor within viewport

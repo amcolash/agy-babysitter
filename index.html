@@ -411,6 +411,44 @@
         </button>
       </div>
 
+      <!-- Tab Context Menu (Right Click on Session Tab) -->
+      <div
+        id="tab-context-menu"
+        class="hidden fixed z-50 min-w-[170px] bg-[#21242b] border border-[#3f444a] rounded-lg shadow-2xl shadow-black/80 py-1 text-xs select-none backdrop-blur-md"
+      >
+        <button
+          type="button"
+          id="tab-menu-item-label"
+          class="w-full flex items-center justify-between px-3 py-2 text-[#DFDFDF] hover:text-[#51afef] hover:bg-[#1b2229] active:bg-[#282c34] transition text-left cursor-pointer"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-[#51afef]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+            <span>Label</span>
+          </span>
+        </button>
+        <div class="h-px bg-[#3f444a] my-1"></div>
+        <button
+          type="button"
+          id="tab-menu-item-close"
+          class="w-full flex items-center justify-between px-3 py-2 text-[#bbc2cf] hover:text-[#ff6c6b] hover:bg-[#ff6c6b]/10 active:bg-[#ff6c6b]/20 transition text-left cursor-pointer"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-[#ff6c6b]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            <span>Close Tab</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          id="tab-menu-item-close-others"
+          class="w-full flex items-center justify-between px-3 py-2 text-[#bbc2cf] hover:text-[#ff6c6b] hover:bg-[#ff6c6b]/10 active:bg-[#ff6c6b]/20 transition text-left cursor-pointer"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-[#ff6c6b]/80" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <span>Close Other Tabs</span>
+          </span>
+        </button>
+      </div>
+
       <!-- Floating Action Button (FAB) Speed Dial -->
       <div id="fab-container" class="fixed bottom-8 right-8 z-40 flex flex-col items-center pointer-events-none sm:hidden">
         <!-- Speed dial sub-buttons: Input, ESC, Up, Down, Enter (opened above keyboard FAB) -->
@@ -673,6 +711,72 @@
               >
                 Create & Attach
               </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Session Label Modal -->
+      <div
+        id="label-modal-overlay"
+        class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      >
+        <div
+          class="modal bg-[#21242b] border border-[#3f444a] rounded-xl p-5 w-full max-w-sm flex flex-col shadow-2xl shadow-black/60"
+        >
+          <div class="modal-header flex items-center justify-between pb-3 mb-3 border-b border-[#3f444a]">
+            <div>
+              <h2 id="label-modal-title" class="text-sm font-bold text-[#DFDFDF]">Set Session Label</h2>
+              <p id="label-modal-subtitle" class="text-xs text-[#5B6268]">Add a custom label for this session</p>
+            </div>
+            <button
+              type="button"
+              id="btn-close-label-modal"
+              aria-label="Close modal"
+              class="text-[#5B6268] hover:text-[#DFDFDF] hover:bg-[#3f444a]/40 p-1.5 rounded-lg transition cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <form id="form-session-label" class="flex flex-col gap-3">
+            <div>
+              <label for="input-session-label" class="block text-xs font-medium text-[#bbc2cf] mb-1">
+                Label <span class="text-[#5B6268] font-normal">(leave blank to remove)</span>
+              </label>
+              <input
+                type="text"
+                id="input-session-label"
+                maxlength="30"
+                placeholder="e.g. backend, logs, testing"
+                class="w-full bg-[#1b2229] border border-[#3f444a] rounded-lg px-3 py-2 text-xs text-[#DFDFDF] placeholder-[#5B6268] focus:outline-none focus:border-[#51afef] transition font-mono"
+              />
+            </div>
+            <div class="modal-actions flex items-center justify-between pt-2">
+              <button
+                type="button"
+                id="btn-clear-label-modal"
+                class="hidden px-2.5 py-1.5 rounded-lg border border-[#ff6c6b]/30 text-[#ff6c6b] hover:bg-[#ff6c6b]/10 text-xs transition cursor-pointer"
+              >
+                Clear Label
+              </button>
+              <div class="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  id="btn-cancel-label-modal"
+                  class="px-3 py-1.5 rounded-lg border border-[#3f444a] text-[#bbc2cf] hover:text-[#DFDFDF] hover:bg-[#282c34] text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  id="btn-save-label-modal"
+                  class="px-3.5 py-1.5 rounded-lg bg-[#51afef] hover:bg-[#51afef]/90 text-white font-semibold text-xs transition cursor-pointer shadow-sm shadow-[#51afef]/20"
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </form>
         </div>

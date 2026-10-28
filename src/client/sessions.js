@@ -33,11 +33,206 @@ const currentSessionLabel = document.getElementById("current-session-label");
 const desktopTabsList = document.getElementById("desktop-tabs-list");
 const btnDesktopNewSession = document.getElementById("btn-desktop-new-session");
 
+const tabContextMenu = document.getElementById("tab-context-menu");
+const tabMenuItemLabel = document.getElementById("tab-menu-item-label");
+const tabMenuItemClose = document.getElementById("tab-menu-item-close");
+const tabMenuItemCloseOthers = document.getElementById("tab-menu-item-close-others");
+
+const labelModalOverlay = document.getElementById("label-modal-overlay");
+const formSessionLabel = document.getElementById("form-session-label");
+const inputSessionLabel = document.getElementById("input-session-label");
+const labelModalTitle = document.getElementById("label-modal-title");
+const labelModalSubtitle = document.getElementById("label-modal-subtitle");
+const btnCloseLabelModal = document.getElementById("btn-close-label-modal");
+const btnCancelLabelModal = document.getElementById("btn-cancel-label-modal");
+const btnClearLabelModal = document.getElementById("btn-clear-label-modal");
+
 let activeSessionsList = [];
 let isDrawerOpen = false;
 let draggedSessionName = null;
+let contextMenuTargetSession = null;
+let labelModalTargetSession = null;
 
 const STORAGE_TAB_ORDER_KEY = "agy_tabs_order";
+const STORAGE_SESSION_LABELS_KEY = "agy_session_labels";
+
+export function getSessionLabels() {
+  try {
+    const raw = localStorage.getItem(STORAGE_SESSION_LABELS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch (e) {}
+  return {};
+}
+
+export function getSessionLabel(sessionName) {
+  if (!sessionName) return "";
+  const labels = getSessionLabels();
+  return typeof labels[sessionName] === "string" ? labels[sessionName] : "";
+}
+
+export function setSessionLabel(sessionName, label) {
+  if (!sessionName) return;
+  const labels = getSessionLabels();
+  const trimmed = (label || "").trim();
+  if (trimmed) {
+    labels[sessionName] = trimmed;
+  } else {
+    delete labels[sessionName];
+  }
+  try {
+    localStorage.setItem(STORAGE_SESSION_LABELS_KEY, JSON.stringify(labels));
+  } catch (e) {}
+}
+
+export function pruneSessionLabels(validSessionNames) {
+  if (!Array.isArray(validSessionNames)) return;
+  const labels = getSessionLabels();
+  let changed = false;
+  const validSet = new Set(validSessionNames);
+  for (const name of Object.keys(labels)) {
+    if (!validSet.has(name)) {
+      delete labels[name];
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      localStorage.setItem(STORAGE_SESSION_LABELS_KEY, JSON.stringify(labels));
+    } catch (e) {}
+  }
+}
+
+export function getSessionDisplayName(sessionName) {
+  const label = getSessionLabel(sessionName);
+  return label ? `${sessionName} [${label}]` : sessionName;
+}
+
+export function closeTabContextMenu() {
+  if (tabContextMenu) {
+    tabContextMenu.classList.add("hidden");
+  }
+}
+
+export function openTabContextMenu(clientX, clientY, sessionName) {
+  if (!tabContextMenu || !sessionName) return;
+  contextMenuTargetSession = sessionName;
+
+  // Dismiss terminal context menu if open
+  const terminalContextMenu = document.getElementById("terminal-context-menu");
+  if (terminalContextMenu) terminalContextMenu.classList.add("hidden");
+
+  // Disable "Close Other Tabs" if only 1 tab
+  if (tabMenuItemCloseOthers) {
+    const hasOthers = activeSessionsList.length > 1;
+    if (hasOthers) {
+      tabMenuItemCloseOthers.classList.remove("opacity-40", "cursor-not-allowed");
+      tabMenuItemCloseOthers.removeAttribute("disabled");
+    } else {
+      tabMenuItemCloseOthers.classList.add("opacity-40", "cursor-not-allowed");
+      tabMenuItemCloseOthers.setAttribute("disabled", "true");
+    }
+  }
+
+  const menuWidth = 180;
+  const menuHeight = 130;
+  const x = Math.min(window.innerWidth - menuWidth - 10, Math.max(10, clientX));
+  const y = Math.min(window.innerHeight - menuHeight - 10, Math.max(10, clientY));
+
+  tabContextMenu.style.left = `${x}px`;
+  tabContextMenu.style.top = `${y}px`;
+  tabContextMenu.classList.remove("hidden");
+}
+
+export function openLabelModal(sessionName) {
+  if (!labelModalOverlay || !sessionName) return;
+  labelModalTargetSession = sessionName;
+  closeTabContextMenu();
+
+  if (labelModalTitle) {
+    labelModalTitle.textContent = `Label '${sessionName}'`;
+  }
+  if (labelModalSubtitle) {
+    labelModalSubtitle.textContent = `Set a custom label for session '${sessionName}'`;
+  }
+
+  const currentLabel = getSessionLabel(sessionName);
+  if (inputSessionLabel) {
+    inputSessionLabel.value = currentLabel;
+  }
+
+  if (btnClearLabelModal) {
+    if (currentLabel) {
+      btnClearLabelModal.classList.remove("hidden");
+    } else {
+      btnClearLabelModal.classList.add("hidden");
+    }
+  }
+
+  labelModalOverlay.classList.remove("hidden");
+  setTimeout(() => {
+    if (inputSessionLabel) {
+      inputSessionLabel.focus();
+      inputSessionLabel.select();
+    }
+  }, 50);
+}
+
+export function closeLabelModal() {
+  if (!labelModalOverlay) return;
+  labelModalOverlay.classList.add("hidden");
+  labelModalTargetSession = null;
+  if (!isMobileDevice() && term) {
+    term.focus();
+  }
+}
+
+export async function closeOtherSessions(keepSessionName) {
+  const others = activeSessionsList.filter((s) => s.name !== keepSessionName);
+  if (others.length === 0) {
+    showToast("No other tabs to close", "info");
+    return;
+  }
+
+  const confirmed = confirm(`Are you sure you want to close ${others.length} other session${others.length > 1 ? "s" : ""}?`);
+  if (!confirmed) return;
+
+  try {
+    let failed = 0;
+    for (const session of others) {
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(session.name)}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (!data.success) {
+          failed++;
+        } else {
+          setSessionLabel(session.name, "");
+        }
+      } catch (err) {
+        failed++;
+      }
+    }
+
+    if (getCurrentSession() !== keepSessionName) {
+      switchToSession(keepSessionName);
+    }
+
+    await loadSessions();
+
+    if (failed === 0) {
+      showToast(`Closed ${others.length} other session${others.length > 1 ? "s" : ""}`, "info");
+    } else {
+      showToast(`Closed ${others.length - failed} sessions (${failed} failed)`, "warning");
+    }
+  } catch (err) {
+    showToast(`Error closing tabs: ${err.message}`, "error");
+  }
+}
 
 export function getCustomTabOrder() {
   try {
@@ -116,7 +311,7 @@ export function computeUniqueSessionName(folderName) {
 export function syncSessionToStorageAndUrl(sessionName) {
   if (!sessionName) return;
   if (currentSessionLabel) {
-    currentSessionLabel.textContent = sessionName;
+    currentSessionLabel.textContent = getSessionDisplayName(sessionName);
   }
   try {
     localStorage.setItem("agy_selected_session", sessionName);
@@ -266,6 +461,7 @@ export async function terminateSession(sessionName) {
 
     if (data.success) {
       showToast(`Terminated session '${sessionName}'`, "info");
+      setSessionLabel(sessionName, "");
       const wasCurrent = getCurrentSession() === sessionName;
       if (wasCurrent) {
         writeTerminal(`\r\n\x1b[33m[Session '${sessionName}' terminated]\x1b[0m\r\n`);
@@ -303,7 +499,7 @@ function renderDesktopTabs() {
     const tab = document.createElement("div");
 
     let tabClasses =
-      "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] ";
+      "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[240px] flex-shrink-0 border-r border-[#3f444a] ";
     if (isActive) {
       const topBorder = notif ? "border-t-[#ECBE7B]" : "border-t-[#51afef]";
       tabClasses += `bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 ${topBorder} border-b-0`;
@@ -316,12 +512,13 @@ function renderDesktopTabs() {
     }
     tab.className = tabClasses;
     tab.dataset.sessionName = session.name;
-    tab.title = `${session.name} (${session.cwd || session.path || "default"})\nDrag to reorder`;
+    const displayName = getSessionDisplayName(session.name);
+    tab.title = `${displayName} (${session.cwd || session.path || "default"})\nRight-click for options\nDrag to reorder`;
     tab.setAttribute("draggable", "true");
 
     tab.innerHTML = `
       ${renderStatusIcon(isActive, notif)}
-      <span class="tracking-tight truncate ${isActive ? "text-[#51afef]" : notif ? "text-[#DFDFDF]" : ""}">${session.name}</span>
+      <span class="tracking-tight truncate ${isActive ? "text-[#51afef]" : notif ? "text-[#DFDFDF]" : ""}">${displayName}</span>
       <button
         type="button"
         draggable="false"
@@ -334,6 +531,12 @@ function renderDesktopTabs() {
         </svg>
       </button>
     `;
+
+    tab.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTabContextMenu(e.clientX, e.clientY, session.name);
+    });
 
     tab.addEventListener("dragstart", (e) => {
       draggedSessionName = session.name;
@@ -459,12 +662,14 @@ function renderDrawerSessions() {
     }
     item.className = itemClasses;
 
+    const displayName = getSessionDisplayName(session.name);
+
     item.innerHTML = `
       <div class="flex items-center gap-2.5 flex-1 min-w-0">
         ${renderStatusIcon(isActive, notif)}
         <div class="flex flex-col min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="text-xs md:text-sm font-bold ${isActive ? (notif ? "text-[#ECBE7B]" : "text-[#51afef]") : notif ? "text-[#DFDFDF]" : "text-[#DFDFDF]"} truncate">${session.name}</span>
+            <span class="text-xs md:text-sm font-bold ${isActive ? (notif ? "text-[#ECBE7B]" : "text-[#51afef]") : notif ? "text-[#DFDFDF]" : "text-[#DFDFDF]"} truncate">${displayName}</span>
             ${isActive ? (notif ? '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#ECBE7B]/20 text-[#ECBE7B] rounded font-semibold">Alert</span>' : '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#51afef]/20 text-[#51afef] rounded font-semibold">Active</span>') : notif ? '<span class="text-[9px] uppercase px-1 py-0.2 bg-[#ECBE7B]/20 text-[#ECBE7B] rounded font-semibold">Alert</span>' : ""}
           </div>
           <span class="text-[11px] text-[#5B6268] truncate">${session.cwd || session.path || "default"}</span>
@@ -481,6 +686,12 @@ function renderDrawerSessions() {
         </svg>
       </button>
     `;
+
+    item.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTabContextMenu(e.clientX, e.clientY, session.name);
+    });
 
     drawerSessionsList.appendChild(item);
   });
@@ -500,18 +711,19 @@ export function updateSessionTabIcons() {
       if (isActive) {
         const topBorder = notif ? "border-t-[#ECBE7B]" : "border-t-[#51afef]";
         tab.className =
-          `session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 ${topBorder} border-b-0`;
+          `session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[240px] flex-shrink-0 border-r border-[#3f444a] bg-[#1b2229] text-[#DFDFDF] font-bold border-t-2 ${topBorder} border-b-0`;
       } else if (notif) {
         tab.className =
-          "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] bg-[#282c34] text-[#DFDFDF] font-medium border-t-2 border-t-[#ECBE7B]/80 border-b border-b-[#3f444a] hover:bg-[#2d3139]";
+          "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[240px] flex-shrink-0 border-r border-[#3f444a] bg-[#282c34] text-[#DFDFDF] font-medium border-t-2 border-t-[#ECBE7B]/80 border-b border-b-[#3f444a] hover:bg-[#2d3139]";
       } else {
         tab.className =
-          "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[220px] flex-shrink-0 border-r border-[#3f444a] bg-[#21242b] text-[#5B6268] hover:text-[#DFDFDF] hover:bg-[#282c34] border-t-2 border-t-transparent border-b border-b-[#3f444a]";
+          "session-tab group flex items-center gap-2 px-3 py-1.5 text-xs transition cursor-pointer select-none max-w-[240px] flex-shrink-0 border-r border-[#3f444a] bg-[#21242b] text-[#5B6268] hover:text-[#DFDFDF] hover:bg-[#282c34] border-t-2 border-t-transparent border-b border-b-[#3f444a]";
       }
 
       const label = tab.querySelector("span.tracking-tight");
       if (label) {
         label.className = `tracking-tight truncate ${isActive ? (notif ? "text-[#ECBE7B]" : "text-[#51afef]") : notif ? "text-[#DFDFDF]" : ""}`;
+        label.textContent = getSessionDisplayName(name);
       }
 
       const iconContainer = tab.querySelector(".status-icon-container");
@@ -540,11 +752,21 @@ export function updateSessionTabIcons() {
           "group flex items-center justify-between p-2.5 rounded-lg border transition cursor-pointer select-none bg-[#1b2229] border-[#3f444a] hover:border-[#51afef]/40 hover:bg-[#1b2229]/80";
       }
 
+      const titleSpan = item.querySelector("span.font-bold");
+      if (titleSpan) {
+        titleSpan.textContent = getSessionDisplayName(name);
+      }
+
       const iconContainer = item.querySelector(".status-icon-container");
       if (iconContainer) {
         iconContainer.outerHTML = renderStatusIcon(isActive, notif);
       }
     });
+  }
+
+  // Update current session badge
+  if (currentSessionLabel && current) {
+    currentSessionLabel.textContent = getSessionDisplayName(current);
   }
 
   // Update mobile header capsule indicator
@@ -592,6 +814,7 @@ export function renderSessions() {
 export function handleServerSessionsChanged(sessions) {
   activeSessionsList = sortSessionsByCustomOrder(Array.isArray(sessions) ? sessions : []);
   pruneSessionNotifications(activeSessionsList.map((s) => s.name));
+  pruneSessionLabels(activeSessionsList.map((s) => s.name));
 
   if (drawerSessionCount) {
     drawerSessionCount.textContent = String(activeSessionsList.length);
@@ -805,10 +1028,112 @@ export function initSessions() {
     btnEmptyNewSession.addEventListener("click", openModal);
   }
 
-  // Escape key closes drawer if open
+  // Tab Context Menu Item Handlers
+  if (tabMenuItemLabel) {
+    tabMenuItemLabel.addEventListener("click", () => {
+      const target = contextMenuTargetSession;
+      closeTabContextMenu();
+      if (target) {
+        openLabelModal(target);
+      }
+    });
+  }
+
+  if (tabMenuItemClose) {
+    tabMenuItemClose.addEventListener("click", async () => {
+      const target = contextMenuTargetSession;
+      closeTabContextMenu();
+      if (target) {
+        await terminateSession(target);
+      }
+    });
+  }
+
+  if (tabMenuItemCloseOthers) {
+    tabMenuItemCloseOthers.addEventListener("click", async () => {
+      const target = contextMenuTargetSession;
+      closeTabContextMenu();
+      if (target) {
+        await closeOtherSessions(target);
+      }
+    });
+  }
+
+  // Dismiss context menu on click outside or window resize
+  document.addEventListener("click", (e) => {
+    if (tabContextMenu && !tabContextMenu.contains(e.target)) {
+      closeTabContextMenu();
+    }
+  });
+
+  window.addEventListener("resize", closeTabContextMenu);
+
+  // Label Modal handlers
+  if (formSessionLabel) {
+    formSessionLabel.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!labelModalTargetSession) {
+        closeLabelModal();
+        return;
+      }
+      const sessionName = labelModalTargetSession;
+      const newLabel = inputSessionLabel ? inputSessionLabel.value.trim() : "";
+      setSessionLabel(sessionName, newLabel);
+      closeLabelModal();
+      renderSessions();
+      if (newLabel) {
+        showToast(`Set label [${newLabel}] for '${sessionName}'`, "info");
+      } else {
+        showToast(`Cleared label for '${sessionName}'`, "info");
+      }
+    });
+  }
+
+  if (btnCloseLabelModal) {
+    btnCloseLabelModal.addEventListener("click", closeLabelModal);
+  }
+
+  if (btnCancelLabelModal) {
+    btnCancelLabelModal.addEventListener("click", closeLabelModal);
+  }
+
+  if (btnClearLabelModal) {
+    btnClearLabelModal.addEventListener("click", () => {
+      if (!labelModalTargetSession) {
+        closeLabelModal();
+        return;
+      }
+      const sessionName = labelModalTargetSession;
+      setSessionLabel(sessionName, "");
+      closeLabelModal();
+      renderSessions();
+      showToast(`Cleared label for '${sessionName}'`, "info");
+    });
+  }
+
+  if (labelModalOverlay) {
+    labelModalOverlay.addEventListener("click", (e) => {
+      if (e.target === labelModalOverlay) {
+        closeLabelModal();
+      }
+    });
+  }
+
+  // Escape key closes context menu, label modal, or drawer
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && isDrawerOpen) {
-      closeDrawer();
+    if (e.key === "Escape") {
+      if (tabContextMenu && !tabContextMenu.classList.contains("hidden")) {
+        closeTabContextMenu();
+        return;
+      }
+      if (labelModalOverlay && !labelModalOverlay.classList.contains("hidden")) {
+        closeLabelModal();
+        return;
+      }
+      if (isDrawerOpen) {
+        closeDrawer();
+        return;
+      }
     }
   });
 }
