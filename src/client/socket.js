@@ -16,9 +16,29 @@ const btnRetryConnection = document.getElementById('btn-retry-connection');
 let ws = null;
 let currentSession = null;
 let reconnectTimer = null;
+let heartbeatTimer = null;
 let isServerUpdating = false;
 let isPollingForOnline = false;
 const RECONNECT_DELAY_MS = 2500;
+const CLIENT_HEARTBEAT_INTERVAL_MS = 25000;
+
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      } catch (e) {}
+    }
+  }, CLIENT_HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
 
 // Attach click listeners to all reload buttons (Shift+Click triggers SW & cache wipe)
 document.querySelectorAll('.btn-status-reload, #btn-status-reload').forEach((btn) => {
@@ -167,6 +187,7 @@ export function clearReconnectTimer() {
 export function disconnectTerminal() {
   clearReconnectTimer();
   clearDisconnectedOverlayTimer();
+  stopHeartbeat();
   currentSession = null;
   if (ws && ws.readyState === WebSocket.OPEN) {
     try {
@@ -180,10 +201,16 @@ export function disconnectTerminal() {
 export function startPollingServerOnline() {
   if (isPollingForOnline) return;
   isPollingForOnline = true;
+  let delay = 1000;
 
   const checkOnline = async () => {
     try {
       const res = await fetch('/api/sessions', { cache: 'no-store', credentials: 'include' });
+      // If redirected to an auth login page (e.g. Cloudflare Access), navigate to login
+      if (res.redirected && (res.url.includes('cloudflareaccess.com') || res.url.includes('login'))) {
+        window.location.href = res.url;
+        return;
+      }
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         console.log('[Recovery] Server is back online, reloading page...');
@@ -191,10 +218,11 @@ export function startPollingServerOnline() {
         return;
       }
     } catch (e) {}
-    setTimeout(checkOnline, 700);
+    delay = Math.min(delay * 1.5, 5000);
+    setTimeout(checkOnline, delay);
   };
 
-  setTimeout(checkOnline, 500);
+  setTimeout(checkOnline, 800);
 }
 
 // Window online / offline listeners
@@ -290,6 +318,7 @@ export function connectTerminal(sessionName) {
   socket.onopen = () => {
     if (ws !== socket) return;
     clearReconnectTimer();
+    startHeartbeat();
 
     if (isServerUpdating) {
       console.log('[Upgrade] Connected during server upgrade, refreshing page with latest bundle...');
@@ -351,6 +380,8 @@ export function connectTerminal(sessionName) {
         } else if (payload.type === 'quota_changed' || payload.type === 'quota_sync') {
           handleServerQuota(payload.quota);
           return;
+        } else if (payload.type === 'pong') {
+          return;
         }
       } catch (e) {}
     }
@@ -361,11 +392,13 @@ export function connectTerminal(sessionName) {
 
   socket.onclose = (event) => {
     if (ws !== socket) return;
+    stopHeartbeat();
     scheduleReconnect(currentSession);
   };
 
   socket.onerror = () => {
     if (ws !== socket) return;
+    stopHeartbeat();
     scheduleReconnect(currentSession);
   };
 }

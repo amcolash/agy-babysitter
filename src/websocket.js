@@ -14,7 +14,32 @@ import { markTurnStarted, clearNotification, getAllNotificationStates, broadcast
 export function setupWebSocketServer(server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
+  // Periodic heartbeat interval to keep intermediate proxies (Cloudflare, Nginx, Caddy, mobile NAT) alive
+  const HEARTBEAT_INTERVAL_MS = 25000;
+  const heartbeatInterval = setInterval(() => {
+    for (const client of wss.clients) {
+      if (client.isAlive === false) {
+        try {
+          client.terminate();
+        } catch (e) {}
+        continue;
+      }
+      client.isAlive = false;
+      try {
+        client.ping();
+      } catch (e) {}
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+
+  wss.on('close', () => {
+    clearInterval(heartbeatInterval);
+  });
+
   wss.on('connection', async (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
     const parsedUrl = url.parse(req.url, true);
     const initialSession = parsedUrl.query.session ? parsedUrl.query.session.trim() : null;
     let cols = parseInt(parsedUrl.query.cols, 10) || 100;
@@ -181,6 +206,12 @@ export function setupWebSocketServer(server) {
               else if (payload.action === 'deny') ptyProcess.write('n\n');
               else if (payload.action === 'interrupt') ptyProcess.write('\x03');
               else if (payload.action === 'enter') ptyProcess.write('\r');
+            }
+            return;
+          } else if (payload.type === 'ping') {
+            ws.isAlive = true;
+            if (!isClosed && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong' }));
             }
             return;
           } else if (payload.type === 'clear_notification') {

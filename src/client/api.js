@@ -15,8 +15,18 @@ export async function safeFetchJson(url, options = {}) {
     };
     const res = await fetch(url, fetchOptions);
 
+    // If redirected to an auth login page (e.g. Cloudflare Access), navigate to login
+    if (res.redirected && (res.url.includes('cloudflareaccess.com') || res.url.includes('login'))) {
+      window.location.href = res.url;
+      return {};
+    }
+
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
+      if (res.url && res.url.includes('cloudflareaccess.com')) {
+        window.location.href = res.url;
+        return {};
+      }
       if (isServerUpdatingState()) {
         showDisconnectedOverlay('Server Updating...', 'The server is applying updates and restarting. Reconnecting automatically...');
       } else {
