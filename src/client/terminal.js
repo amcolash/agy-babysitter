@@ -4,7 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
-import { switchRelativeSession, switchToNextNotifiedSession, moveActiveSession, terminateSession, closeDrawer, closeLabelModal, closeTabContextMenu } from "./sessions.js";
+import { switchRelativeSession, switchToNextNotifiedSession, navigateSessionTab, moveActiveSession, terminateSession, closeDrawer, closeLabelModal, closeTabContextMenu } from "./sessions.js";
 import { getCurrentSession, sendAction } from "./socket.js";
 import { openModal, closeModal } from "./modal.js";
 import { closeInputModal } from "./inputModal.js";
@@ -505,12 +505,12 @@ export function initTerminal(onInput, onResize) {
     openModal();
   }
 
-  let lastNotifSwitchTime = 0;
-  function handleNextNotifiedSessionAction(direction = 1) {
+  let lastTabSwitchTime = 0;
+  function handleTabNavigationAction(direction = 1) {
     const now = Date.now();
-    if (now - lastNotifSwitchTime < 150) return;
-    lastNotifSwitchTime = now;
-    const switched = switchToNextNotifiedSession(direction);
+    if (now - lastTabSwitchTime < 150) return;
+    lastTabSwitchTime = now;
+    const switched = navigateSessionTab(direction);
     if (switched) {
       closeDrawer();
     }
@@ -687,14 +687,15 @@ export function initTerminal(onInput, onResize) {
         return;
       }
 
-      // Notification tab cycling: Ctrl+Tab (forward) and Ctrl+Shift+Tab (backward)
+      // Conditional tab navigation: Ctrl+Tab (forward) and Ctrl+Shift+Tab (backward)
+      // When 1+ notifications exist, cycles through notified tabs; otherwise steps normally tab-by-tab.
       const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
-      const isNotifTab = isCtrlOrMeta && isTab;
+      const isTabSwitch = isCtrlOrMeta && isTab;
 
-      if (isNotifTab) {
+      if (isTabSwitch) {
         e.preventDefault();
         e.stopPropagation();
-        handleNextNotifiedSessionAction(e.shiftKey ? -1 : 1);
+        handleTabNavigationAction(e.shiftKey ? -1 : 1);
         return;
       }
 
@@ -856,13 +857,14 @@ export function initTerminal(onInput, onResize) {
       return false;
     }
 
-    // Notification tab cycling: Ctrl+Tab (forward) and Ctrl+Shift+Tab (backward)
+    // Conditional tab navigation: Ctrl+Tab (forward) and Ctrl+Shift+Tab (backward)
+    // When 1+ notifications exist, cycles through notified tabs; otherwise steps normally tab-by-tab.
     const isTab = e.key === 'Tab' || e.key === 'Backtab' || e.code === 'Tab' || e.keyCode === 9;
-    const isNotifTab = isCtrlOrMeta && isTab;
+    const isTabSwitch = isCtrlOrMeta && isTab;
 
-    if (isNotifTab) {
+    if (isTabSwitch) {
       if (e.type === 'keydown') {
-        handleNextNotifiedSessionAction(e.shiftKey ? -1 : 1);
+        handleTabNavigationAction(e.shiftKey ? -1 : 1);
       }
       e.preventDefault();
       e.stopPropagation();

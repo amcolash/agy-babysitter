@@ -367,7 +367,7 @@ export function switchToSession(sessionName) {
 }
 
 export function switchRelativeSession(direction) {
-  if (!activeSessionsList || activeSessionsList.length <= 1) return;
+  if (!activeSessionsList || activeSessionsList.length <= 1) return false;
   const current = getCurrentSession();
   const currentIndex = activeSessionsList.findIndex((s) => s.name === current);
   let nextIndex = 0;
@@ -379,7 +379,25 @@ export function switchRelativeSession(direction) {
   const target = activeSessionsList[nextIndex];
   if (target) {
     switchToSession(target.name);
+    return true;
   }
+  return false;
+}
+
+export function getNotifiedSessionCount() {
+  if (!activeSessionsList || activeSessionsList.length === 0) return 0;
+  return activeSessionsList.reduce((count, session) => {
+    return count + (session && getSessionNotification(session.name) ? 1 : 0);
+  }, 0);
+}
+
+export function navigateSessionTab(direction = 1) {
+  if (!activeSessionsList || activeSessionsList.length <= 1) return false;
+  const notifCount = getNotifiedSessionCount();
+  if (notifCount >= 1) {
+    return switchToNextNotifiedSession(direction);
+  }
+  return switchRelativeSession(direction);
 }
 
 export function switchToNextNotifiedSession(direction = 1) {
