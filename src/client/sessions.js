@@ -7,6 +7,7 @@ import {
   clearReconnectTimer,
   hideDisconnectedOverlay,
   updateStatus,
+  sendSetSessionLabel,
 } from "./socket.js";
 import { showToast } from "./toast.js";
 import { openModal } from "./modal.js";
@@ -55,54 +56,87 @@ let labelModalTargetSession = null;
 
 const STORAGE_TAB_ORDER_KEY = "agy_tabs_order";
 const STORAGE_SESSION_LABELS_KEY = "agy_session_labels";
+let sessionLabels = {};
 
 export function getSessionLabels() {
-  try {
-    const raw = localStorage.getItem(STORAGE_SESSION_LABELS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") return parsed;
-    }
-  } catch (e) {}
-  return {};
+  return { ...sessionLabels };
 }
 
 export function getSessionLabel(sessionName) {
   if (!sessionName) return "";
-  const labels = getSessionLabels();
-  return typeof labels[sessionName] === "string" ? labels[sessionName] : "";
+  return typeof sessionLabels[sessionName] === "string" ? sessionLabels[sessionName] : "";
 }
 
-export function setSessionLabel(sessionName, label) {
+export function handleServerSessionLabels(labels) {
+  if (labels && typeof labels === "object" && !Array.isArray(labels)) {
+    sessionLabels = { ...labels };
+    renderSessions();
+  }
+}
+
+export async function setSessionLabel(sessionName, label) {
   if (!sessionName) return;
-  const labels = getSessionLabels();
   const trimmed = (label || "").trim();
   if (trimmed) {
-    labels[sessionName] = trimmed;
+    sessionLabels[sessionName] = trimmed;
   } else {
-    delete labels[sessionName];
+    delete sessionLabels[sessionName];
   }
+  renderSessions();
+
+  // Send via WebSocket for fast real-time synchronization
+  sendSetSessionLabel(sessionName, trimmed);
+
+  // Persist to server via REST API
   try {
-    localStorage.setItem(STORAGE_SESSION_LABELS_KEY, JSON.stringify(labels));
-  } catch (e) {}
+    if (trimmed) {
+      await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/label`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: trimmed }),
+        credentials: "include",
+      });
+    } else {
+      await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/label`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+    }
+  } catch (err) {
+    console.warn("Failed to persist session label to server:", err);
+  }
 }
 
 export function pruneSessionLabels(validSessionNames) {
   if (!Array.isArray(validSessionNames)) return;
-  const labels = getSessionLabels();
-  let changed = false;
   const validSet = new Set(validSessionNames);
-  for (const name of Object.keys(labels)) {
+  let changed = false;
+  for (const name of Object.keys(sessionLabels)) {
     if (!validSet.has(name)) {
-      delete labels[name];
+      delete sessionLabels[name];
       changed = true;
     }
   }
   if (changed) {
-    try {
-      localStorage.setItem(STORAGE_SESSION_LABELS_KEY, JSON.stringify(labels));
-    } catch (e) {}
+    renderSessions();
   }
+}
+
+export async function migrateLocalStorageLabels() {
+  try {
+    const raw = localStorage.getItem(STORAGE_SESSION_LABELS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const [name, lbl] of Object.entries(parsed)) {
+          if (lbl && typeof lbl === "string" && !sessionLabels[name]) {
+            await setSessionLabel(name, lbl);
+          }
+        }
+      }
+      localStorage.removeItem(STORAGE_SESSION_LABELS_KEY);
+    }
+  } catch (e) {}
 }
 
 export function getSessionDisplayName(sessionName) {
@@ -211,7 +245,7 @@ export async function closeOtherSessions(keepSessionName) {
         if (!data.success) {
           failed++;
         } else {
-          setSessionLabel(session.name, "");
+          delete sessionLabels[session.name];
         }
       } catch (err) {
         failed++;
@@ -461,7 +495,7 @@ export async function terminateSession(sessionName) {
 
     if (data.success) {
       showToast(`Terminated session '${sessionName}'`, "info");
-      setSessionLabel(sessionName, "");
+      delete sessionLabels[sessionName];
       const wasCurrent = getCurrentSession() === sessionName;
       if (wasCurrent) {
         writeTerminal(`\r\n\x1b[33m[Session '${sessionName}' terminated]\x1b[0m\r\n`);
@@ -812,6 +846,17 @@ export function renderSessions() {
 }
 
 export function handleServerSessionsChanged(sessions) {
+  if (Array.isArray(sessions)) {
+    sessions.forEach((s) => {
+      if (s.name && typeof s.label === "string") {
+        if (s.label) {
+          sessionLabels[s.name] = s.label;
+        } else {
+          delete sessionLabels[s.name];
+        }
+      }
+    });
+  }
   activeSessionsList = sortSessionsByCustomOrder(Array.isArray(sessions) ? sessions : []);
   pruneSessionNotifications(activeSessionsList.map((s) => s.name));
   pruneSessionLabels(activeSessionsList.map((s) => s.name));
@@ -867,8 +912,19 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
   try {
     const data = await safeFetchJson("/api/sessions");
     const sessions = data.sessions || [];
+    if (data.labels && typeof data.labels === "object") {
+      sessionLabels = { ...sessionLabels, ...data.labels };
+    }
+    if (Array.isArray(sessions)) {
+      sessions.forEach((s) => {
+        if (s.name && typeof s.label === "string" && s.label) {
+          sessionLabels[s.name] = s.label;
+        }
+      });
+    }
     activeSessionsList = sortSessionsByCustomOrder(sessions);
     pruneSessionNotifications(activeSessionsList.map((s) => s.name));
+    pruneSessionLabels(activeSessionsList.map((s) => s.name));
 
     if (drawerSessionCount) {
       drawerSessionCount.textContent = String(activeSessionsList.length);
@@ -930,6 +986,8 @@ export async function loadSessions(selectSessionName = null, autoConnect = true)
 }
 
 export function initSessions() {
+  migrateLocalStorageLabels();
+
   setNotificationChangeCallback(() => {
     updateSessionTabIcons();
   });
@@ -1070,7 +1128,7 @@ export function initSessions() {
 
   // Label Modal handlers
   if (formSessionLabel) {
-    formSessionLabel.addEventListener("submit", (e) => {
+    formSessionLabel.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!labelModalTargetSession) {
         closeLabelModal();
@@ -1078,9 +1136,8 @@ export function initSessions() {
       }
       const sessionName = labelModalTargetSession;
       const newLabel = inputSessionLabel ? inputSessionLabel.value.trim() : "";
-      setSessionLabel(sessionName, newLabel);
       closeLabelModal();
-      renderSessions();
+      await setSessionLabel(sessionName, newLabel);
       if (newLabel) {
         showToast(`Set label [${newLabel}] for '${sessionName}'`, "info");
       } else {
@@ -1098,15 +1155,14 @@ export function initSessions() {
   }
 
   if (btnClearLabelModal) {
-    btnClearLabelModal.addEventListener("click", () => {
+    btnClearLabelModal.addEventListener("click", async () => {
       if (!labelModalTargetSession) {
         closeLabelModal();
         return;
       }
       const sessionName = labelModalTargetSession;
-      setSessionLabel(sessionName, "");
       closeLabelModal();
-      renderSessions();
+      await setSessionLabel(sessionName, "");
       showToast(`Cleared label for '${sessionName}'`, "info");
     });
   }

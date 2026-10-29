@@ -1,6 +1,6 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice, setTerminalInputEnabled } from './terminal.js';
 import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized, handleServerSessionNotification, handleServerSessionNotificationsSync } from './notifications.js';
-import { handleServerSessionsChanged, loadSessions } from './sessions.js';
+import { handleServerSessionsChanged, handleServerSessionLabels, loadSessions } from './sessions.js';
 import { handleServerQuota } from './quota.js';
 import { setFabDisabled } from './actions.js';
 import { setInputModalEnabled } from './inputModal.js';
@@ -371,6 +371,9 @@ export function connectTerminal(sessionName) {
         } else if (payload.type === 'sessions_changed' || payload.type === 'sessions_sync') {
           handleServerSessionsChanged(payload.sessions);
           return;
+        } else if (payload.type === 'session_labels_changed' || payload.type === 'session_labels_sync') {
+          handleServerSessionLabels(payload.labels);
+          return;
         } else if (payload.type === 'session_notification') {
           handleServerSessionNotification(payload.session, payload.state);
           return;
@@ -427,5 +430,11 @@ export function sendAction(action) {
     handleUserInteraction();
     markTurnStarted();
     ws.send(JSON.stringify({ type: 'action', action }));
+  }
+}
+
+export function sendSetSessionLabel(sessionName, label) {
+  if (ws && ws.readyState === WebSocket.OPEN && sessionName) {
+    ws.send(JSON.stringify({ type: 'set_session_label', session: sessionName, label: label || '' }));
   }
 }

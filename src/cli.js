@@ -218,6 +218,7 @@ async function showInteractiveMenu() {
     items.push({
       type: 'session',
       name: s.name,
+      label: s.label || '',
       path: s.cwd || config.DEFAULT_CWD,
       badge: s.name === config.DEFAULT_SESSION ? '(Default)' : ''
     });
@@ -251,8 +252,9 @@ async function showInteractiveMenu() {
         const num = `\x1b[38;2;91;98;104m[${idx + 1}]\x1b[0m`;
         const nameColor = isSelected ? '\x1b[1m\x1b[38;2;81;175;239m' : '\x1b[38;2;223;223;223m';
         const displayPath = `\x1b[38;2;91;98;104m${formatDisplayPath(item.path)}\x1b[0m`;
+        const labelTag = item.label ? ` \x1b[38;2;198;120;221m[${item.label}]\x1b[0m` : '';
         const badge = item.badge ? ` \x1b[38;2;152;190;101m${item.badge}\x1b[0m` : '';
-        lines.push(`${pointer}${num} ${nameColor}${item.name.padEnd(20)}\x1b[0m ${displayPath}${badge}`);
+        lines.push(`${pointer}${num} ${nameColor}${item.name.padEnd(20)}\x1b[0m ${displayPath}${labelTag}${badge}`);
       } else if (item.type === 'create') {
         const keyTag = `\x1b[38;2;91;98;104m[+]\x1b[0m`;
         const color = isSelected ? '\x1b[1m\x1b[38;2;152;190;101m' : '\x1b[38;2;152;190;101m';

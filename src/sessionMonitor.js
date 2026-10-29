@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import { touchWakelock } from './wakelock.js';
 import { listSessions } from './tmuxManager.js';
 import { AUGMENTED_PATH } from './config.js';
+import { pruneSessionLabels, getSessionLabels, onSessionLabelsChange } from './sessionLabels.js';
 
 // Stores notification state per session: Map<sessionName, 'settled' | 'input' | null>
 const sessionStates = new Map();
@@ -14,6 +15,7 @@ const dismissedPromptSessions = new Set();
 let wssInstance = null;
 let monitorInterval = null;
 let lastSessionsHash = '';
+let unsubscribeLabels = null;
 
 function getSessionsSignature(sessions) {
   return sessions.map((s) => `${s.name}:${s.cwd}`).sort().join('|');
@@ -100,7 +102,7 @@ export function broadcastSessionsList(sessions = null) {
   const signature = getSessionsSignature(currentSessions);
   lastSessionsHash = signature;
 
-  // Prune notification states for sessions that no longer exist
+  // Prune notification states and session labels for sessions that no longer exist
   const activeNames = new Set(currentSessions.map((s) => s.name));
   for (const name of sessionStates.keys()) {
     if (!activeNames.has(name)) {
@@ -108,10 +110,32 @@ export function broadcastSessionsList(sessions = null) {
       pendingInputMisses.delete(name);
     }
   }
+  pruneSessionLabels(Array.from(activeNames));
 
   const msg = JSON.stringify({
     type: 'sessions_changed',
     sessions: currentSessions
+  });
+
+  wssInstance.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(msg);
+      } catch (e) {}
+    }
+  });
+}
+
+/**
+ * Broadcasts the current session labels to all connected WebSocket clients
+ * @param {Record<string, string>} [labels]
+ */
+export function broadcastSessionLabels(labels = null) {
+  if (!wssInstance) return;
+  const currentLabels = labels || getSessionLabels();
+  const msg = JSON.stringify({
+    type: 'session_labels_changed',
+    labels: currentLabels
   });
 
   wssInstance.clients.forEach((client) => {
@@ -366,6 +390,13 @@ export function initSessionMonitor(wss) {
     lastSessionsHash = getSessionsSignature(initialSessions);
   } catch (e) {}
 
+  if (unsubscribeLabels) {
+    unsubscribeLabels();
+  }
+  unsubscribeLabels = onSessionLabelsChange((labels) => {
+    broadcastSessionLabels(labels);
+  });
+
   if (monitorInterval) {
     clearInterval(monitorInterval);
   }
@@ -381,6 +412,10 @@ export function stopSessionMonitor() {
     clearInterval(monitorInterval);
     monitorInterval = null;
   }
+  if (unsubscribeLabels) {
+    unsubscribeLabels();
+    unsubscribeLabels = null;
+  }
   sessionStates.clear();
   pendingInputMisses.clear();
   dismissedPromptSessions.clear();
@@ -391,6 +426,7 @@ export default {
   initSessionMonitor,
   stopSessionMonitor,
   broadcastSessionsList,
+  broadcastSessionLabels,
   checkSessionChanges,
   broadcastQuota,
   handleLifecycleHookEvent,

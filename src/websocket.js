@@ -5,6 +5,7 @@ import config from './config.js';
 import { getQuota } from './quotaManager.js';
 import { attachPtySession, listSessions, hasSession } from './tmuxManager.js';
 import { markTurnStarted, clearNotification, getAllNotificationStates, broadcastSessionsList } from './sessionMonitor.js';
+import { getSessionLabels, setSessionLabel } from './sessionLabels.js';
 
 /**
  * Sets up WebSocket server for terminal streaming and control actions
@@ -152,7 +153,7 @@ export function setupWebSocketServer(server) {
       attachToSession(initialSession, cols, rows);
     }
 
-    // Always send active sessions list, notification states, and quota to newly connected client
+    // Always send active sessions list, notification states, labels, and quota to newly connected client
     try {
       const currentSessions = listSessions();
       ws.send(JSON.stringify({ type: 'sessions_changed', sessions: currentSessions }));
@@ -160,6 +161,11 @@ export function setupWebSocketServer(server) {
       const initialStates = getAllNotificationStates();
       if (initialStates && Object.keys(initialStates).length > 0) {
         ws.send(JSON.stringify({ type: 'session_notifications_sync', states: initialStates }));
+      }
+
+      const initialLabels = getSessionLabels();
+      if (initialLabels && Object.keys(initialLabels).length > 0) {
+        ws.send(JSON.stringify({ type: 'session_labels_sync', labels: initialLabels }));
       }
 
       const initialQuota = getQuota();
@@ -181,6 +187,9 @@ export function setupWebSocketServer(server) {
             return;
           } else if (payload.type === 'detach') {
             cleanupPty();
+            return;
+          } else if (payload.type === 'set_session_label' && payload.session) {
+            setSessionLabel(payload.session, payload.label || '');
             return;
           } else if (payload.type === 'resize' && payload.cols && payload.rows) {
             cols = Math.max(20, payload.cols);

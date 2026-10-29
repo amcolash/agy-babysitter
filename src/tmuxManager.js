@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import config, { resolveTilde, AUGMENTED_PATH } from './config.js';
 import { addRecentSession } from './recentSessions.js';
+import { getSessionLabel, removeSessionLabel } from './sessionLabels.js';
 
 export function sanitizeSessionName(name) {
   if (!name) return 'session';
@@ -30,7 +31,8 @@ export function listSessions() {
           name,
           cwd: cwd || config.DEFAULT_CWD,
           attached: parseInt(attached, 10) || 0,
-          createdAt: (parseInt(createdAt, 10) || 0) * 1000
+          createdAt: (parseInt(createdAt, 10) || 0) * 1000,
+          label: getSessionLabel(name) || ''
         };
       });
 
@@ -191,6 +193,7 @@ export function terminateSession(name) {
     execSync(`tmux kill-session -t ${JSON.stringify('=' + sessionName)} 2>/dev/null`, {
       env: { ...process.env, PATH: AUGMENTED_PATH }
     });
+    removeSessionLabel(sessionName);
     return true;
   } catch (e) {
     return false;
