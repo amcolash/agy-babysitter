@@ -84,7 +84,7 @@ export function initActions() {
     btnFabEsc.addEventListener('click', (e) => {
       e.stopPropagation();
       if (isFabDisabled) return;
-      sendInput('\x1b');
+      sendAction('escape');
     });
   }
 

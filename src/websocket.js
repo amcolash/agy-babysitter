@@ -3,9 +3,11 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { getQuota } from './quotaManager.js';
-import { attachPtySession, listSessions, hasSession } from './tmuxManager.js';
+import { attachPtySession, listSessions, hasSession, sendTmuxKeys } from './tmuxManager.js';
 import { markTurnStarted, clearNotification, getAllNotificationStates, broadcastSessionsList } from './sessionMonitor.js';
 import { getSessionLabels, setSessionLabel } from './sessionLabels.js';
+
+const SERVER_BOOT_TIME = Date.now();
 
 /**
  * Sets up WebSocket server for terminal streaming and control actions
@@ -153,8 +155,10 @@ export function setupWebSocketServer(server) {
       attachToSession(initialSession, cols, rows);
     }
 
-    // Always send active sessions list, notification states, labels, and quota to newly connected client
+    // Always send server version/boot timestamp, active sessions list, notification states, labels, and quota to newly connected client
     try {
+      ws.send(JSON.stringify({ type: 'server_version', bootTime: SERVER_BOOT_TIME }));
+
       const currentSessions = listSessions();
       ws.send(JSON.stringify({ type: 'sessions_changed', sessions: currentSessions }));
 
@@ -201,19 +205,42 @@ export function setupWebSocketServer(server) {
             }
             return;
           } else if (payload.type === 'input' && payload.data !== undefined) {
+            if (payload.data === '\x1b') {
+              const activeSes = payload.session || currentAttachedSession || ws.sessionName;
+              if (activeSes && sendTmuxKeys(activeSes, 'Escape')) {
+                return;
+              }
+            }
             if (ptyProcess) {
               ptyProcess.write(payload.data);
             }
             return;
           } else if (payload.type === 'action') {
-            const activeSes = payload.session || currentAttachedSession;
+            const activeSes = payload.session || currentAttachedSession || ws.sessionName;
             if (activeSes) {
               markTurnStarted(activeSes);
+            }
+            if (payload.action === 'escape') {
+              if (activeSes && sendTmuxKeys(activeSes, 'Escape')) {
+                return;
+              }
+              if (ptyProcess) {
+                ptyProcess.write('\x1b');
+              }
+              return;
+            }
+            if (payload.action === 'interrupt') {
+              if (activeSes && sendTmuxKeys(activeSes, 'C-c')) {
+                return;
+              }
+              if (ptyProcess) {
+                ptyProcess.write('\x03');
+              }
+              return;
             }
             if (ptyProcess) {
               if (payload.action === 'approve') ptyProcess.write('y\n');
               else if (payload.action === 'deny') ptyProcess.write('n\n');
-              else if (payload.action === 'interrupt') ptyProcess.write('\x03');
               else if (payload.action === 'enter') ptyProcess.write('\r');
             }
             return;

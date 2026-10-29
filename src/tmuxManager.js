@@ -232,6 +232,28 @@ export function attachPtySession({ sessionName, cols = 100, rows = 30 }) {
   return ptyProcess;
 }
 
+/**
+ * Send keys directly into a tmux session pane via tmux send-keys, bypassing pty stream buffering.
+ * Automatically exits tmux copy-mode if the pane was in copy/scroll mode.
+ * @param {string} sessionName
+ * @param {string} keys
+ * @returns {boolean}
+ */
+export function sendTmuxKeys(sessionName, keys) {
+  if (!sessionName || !keys) return false;
+  try {
+    const sanitized = sanitizeSessionName(sessionName);
+    const target = sanitized + ':';
+    const opts = { env: { ...process.env, PATH: AUGMENTED_PATH } };
+    execSync(`tmux copy-mode -q -t ${JSON.stringify(target)} 2>/dev/null || true`, opts);
+    execSync(`tmux send-keys -t ${JSON.stringify(target)} ${keys} 2>/dev/null`, opts);
+    return true;
+  } catch (e) {
+    console.error(`[TmuxManager] sendTmuxKeys error for session='${sessionName}':`, e.message);
+    return false;
+  }
+}
+
 export default {
   listSessions,
   hasSession,
@@ -240,5 +262,6 @@ export default {
   createSession,
   terminateSession,
   attachPtySession,
+  sendTmuxKeys,
   sanitizeSessionName
 };

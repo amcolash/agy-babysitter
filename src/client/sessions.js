@@ -644,6 +644,10 @@ function renderDesktopTabs() {
       if (e.target.closest(".btn-tab-close")) return;
       if (session.name !== getCurrentSession()) {
         switchToSession(session.name);
+      } else {
+        if (!isMobileDevice() && term) {
+          term.focus();
+        }
       }
     });
 

@@ -19,6 +19,7 @@ let reconnectTimer = null;
 let heartbeatTimer = null;
 let isServerUpdating = false;
 let isPollingForOnline = false;
+let lastServerBootTime = null;
 const RECONNECT_DELAY_MS = 2500;
 const CLIENT_HEARTBEAT_INTERVAL_MS = 25000;
 
@@ -342,7 +343,15 @@ export function connectTerminal(sessionName) {
     if (typeof event.data === 'string' && event.data.startsWith('{')) {
       try {
         const payload = JSON.parse(event.data);
-        if (payload.type === 'reload') {
+        if (payload.type === 'server_version' && payload.bootTime) {
+          if (lastServerBootTime !== null && lastServerBootTime !== payload.bootTime) {
+            console.log('[Version] Server restarted/updated with newer build, reloading page...');
+            window.location.reload();
+            return;
+          }
+          lastServerBootTime = payload.bootTime;
+          return;
+        } else if (payload.type === 'reload') {
           console.log('[Auto-Refresh] UI change detected, reloading page...');
           window.location.reload();
           return;
@@ -415,13 +424,13 @@ export function sendClearNotification(sessionName) {
 export function sendInput(data) {
   if (ws && ws.readyState === WebSocket.OPEN && currentSession) {
     handleUserInteraction();
-    ws.send(JSON.stringify({ type: 'input', data }));
+    ws.send(JSON.stringify({ type: 'input', data, session: currentSession }));
   }
 }
 
 export function sendResize(cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN && cols && rows) {
-    ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+    ws.send(JSON.stringify({ type: 'resize', cols, rows, session: currentSession }));
   }
 }
 
@@ -429,7 +438,7 @@ export function sendAction(action) {
   if (ws && ws.readyState === WebSocket.OPEN && currentSession) {
     handleUserInteraction();
     markTurnStarted();
-    ws.send(JSON.stringify({ type: 'action', action }));
+    ws.send(JSON.stringify({ type: 'action', action, session: currentSession }));
   }
 }
 

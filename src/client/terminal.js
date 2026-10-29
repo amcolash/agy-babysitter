@@ -5,13 +5,25 @@ import { openInputModal } from "./inputModal.js";
 import { showToast } from "./toast.js";
 import { onTerminalResized, markTurnStarted } from "./notifications.js";
 import { switchRelativeSession, switchToNextNotifiedSession, moveActiveSession, terminateSession, closeDrawer, closeLabelModal, closeTabContextMenu } from "./sessions.js";
-import { getCurrentSession } from "./socket.js";
+import { getCurrentSession, sendAction } from "./socket.js";
 import { openModal, closeModal } from "./modal.js";
 import { closeInputModal } from "./inputModal.js";
 import { closeSettingsModal } from "./settings.js";
+import { closeScanModal } from "./discoveryUI.js";
+import { toggleFabMenu } from "./actions.js";
 
 const terminalContainer = document.getElementById("terminal-container");
 const terminalEl = document.getElementById("terminal");
+const contextMenu = document.getElementById("terminal-context-menu");
+
+export function closeContextMenu() {
+  if (contextMenu && !contextMenu.classList.contains("hidden")) {
+    contextMenu.classList.add("hidden");
+    if (!isMobileDevice() && term) {
+      term.focus();
+    }
+  }
+}
 
 export function isMobileDevice() {
   return (
@@ -188,6 +200,9 @@ export function initTerminal(onInput, onResize) {
     'mousedown',
     (e) => {
       if (e.button === 0) {
+        if (!isMobileDevice() && term) {
+          term.focus();
+        }
         isLeftDragging = true;
         try {
           Object.defineProperty(e, 'shiftKey', { get: () => true, configurable: true });
@@ -501,10 +516,125 @@ export function initTerminal(onInput, onResize) {
     }
   }
 
+  let lastEscapeTime = 0;
+  function dispatchEscapeAction() {
+    const now = Date.now();
+    if (now - lastEscapeTime < 80) return;
+    lastEscapeTime = now;
+
+    const helperTextarea = terminalEl?.querySelector('.xterm-helper-textarea');
+    if (!isMobileDevice() && term && helperTextarea && document.activeElement !== helperTextarea) {
+      term.focus();
+    }
+    sendAction('escape');
+  }
+
   // Global window keydown interceptor in capture phase
   window.addEventListener(
     'keydown',
     (e) => {
+      // Guarantee reliable Escape handling:
+      // If any modal, overlay, menu or drawer is open, close it and refocus terminal.
+      // Otherwise, immediately route Escape (\x1b) to the active session terminal!
+      if (e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27) {
+        // 1. Context menus and speed dial
+        if (contextMenu && !contextMenu.classList.contains('hidden')) {
+          closeContextMenu();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const tabContextMenu = document.getElementById('tab-context-menu');
+        if (tabContextMenu && !tabContextMenu.classList.contains('hidden')) {
+          closeTabContextMenu();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const fabMenu = document.getElementById('fab-menu');
+        if (fabMenu && !fabMenu.classList.contains('hidden')) {
+          toggleFabMenu(false);
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        // 2. Modals and overlays
+        const labelModalOverlay = document.getElementById('label-modal-overlay');
+        if (labelModalOverlay && !labelModalOverlay.classList.contains('hidden')) {
+          closeLabelModal();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const createModal = document.getElementById('modal-overlay');
+        if (createModal && !createModal.classList.contains('hidden')) {
+          closeModal();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const settingsModal = document.getElementById('settings-modal-overlay');
+        if (settingsModal && !settingsModal.classList.contains('hidden')) {
+          closeSettingsModal();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const inputModal = document.getElementById('input-popup-overlay');
+        if (inputModal && !inputModal.classList.contains('hidden')) {
+          closeInputModal();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const scanModal = document.getElementById('scan-modal-overlay');
+        if (scanModal && !scanModal.classList.contains('hidden')) {
+          closeScanModal();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        const sessionsDrawer = document.getElementById('sessions-drawer');
+        if (sessionsDrawer && sessionsDrawer.classList.contains('open')) {
+          closeDrawer();
+          if (!isMobileDevice() && term) term.focus();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        // 3. If typing in an external input/textarea outside the terminal, let it handle Escape
+        const activeTag = document.activeElement?.tagName;
+        const isInsideOtherInput =
+          (activeTag === 'INPUT' || activeTag === 'TEXTAREA') &&
+          !document.activeElement.classList.contains('xterm-helper-textarea');
+        if (isInsideOtherInput) {
+          return;
+        }
+
+        // 4. Otherwise, guarantee Escape is routed straight to active terminal
+        dispatchEscapeAction();
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
       const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
       const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
@@ -618,12 +748,49 @@ export function initTerminal(onInput, onResize) {
         }
         return;
       }
+
+      // Fallback focus recovery: if the user typed normal keys while focus was outside xterm's textarea
+      // (e.g. on body, background, or active tab), focus terminal and forward the keystroke so it is never dropped!
+      const helperTextarea = terminalEl?.querySelector('.xterm-helper-textarea');
+      if (!isMobileDevice() && term && isTerminalInputEnabled && helperTextarea && document.activeElement !== helperTextarea) {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          if (e.key.length === 1) {
+            term.focus();
+            if (onInput) onInput(e.key);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          } else if (e.key === 'Enter') {
+            term.focus();
+            if (onInput) onInput('\r');
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          } else if (e.key === 'Backspace') {
+            term.focus();
+            if (onInput) onInput('\x7f');
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+        }
+      }
     },
     { capture: true }
   );
 
-  // Custom Key Event Handler for xterm (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
+  // Custom Key Event Handler for xterm (Escape, Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+Shift+C, Ctrl+Shift+V, Cmd+C, Cmd+V, Ctrl+C with selection, Ctrl+Shift+[/], Ctrl+Shift+Arrow, Shift+Enter)
   term.attachCustomKeyEventHandler((e) => {
+    const isEsc = e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27;
+    if (isEsc) {
+      if (e.type === 'keydown') {
+        dispatchEscapeAction();
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
     const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
     const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
     const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
@@ -759,10 +926,15 @@ export function initTerminal(onInput, onResize) {
     return true;
   });
 
-  // Prevent browser default on keyup for hijacked combinations (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+Shift+Tab)
+  // Prevent browser default on keyup for hijacked combinations (Escape, Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+Shift+Tab)
   window.addEventListener(
     'keyup',
     (e) => {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       const isCtrlOrMeta = (e.ctrlKey || e.metaKey) && !e.altKey;
       const isW = e.key === 'w' || e.key === 'W' || e.code === 'KeyW' || e.keyCode === 87;
       const isT = e.key === 't' || e.key === 'T' || e.code === 'KeyT' || e.keyCode === 84;
@@ -776,26 +948,23 @@ export function initTerminal(onInput, onResize) {
     { capture: true }
   );
 
-  // When in fullscreen mode, lock keys so browser never handles Ctrl+W / Ctrl+N / Ctrl+T / Tab
+  // When in fullscreen or standalone mode, lock keys so browser never handles Escape / Ctrl+W / Ctrl+N / Ctrl+T / Tab
   if (typeof navigator !== 'undefined' && navigator.keyboard && typeof navigator.keyboard.lock === 'function') {
     const tryLockKeys = () => {
-      if (document.fullscreenElement) {
-        navigator.keyboard.lock(['KeyW', 'KeyN', 'KeyT', 'Tab']).catch(() => {});
+      const isStandalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+      if (document.fullscreenElement || isStandalone) {
+        navigator.keyboard.lock(['Escape', 'KeyW', 'KeyN', 'KeyT', 'Tab']).catch(() => {});
       }
     };
     document.addEventListener('fullscreenchange', tryLockKeys);
+    tryLockKeys();
   }
 
   // Right-click custom context menu
-  const contextMenu = document.getElementById('terminal-context-menu');
   const btnMenuCopy = document.getElementById('menu-item-copy');
   const btnMenuPaste = document.getElementById('menu-item-paste');
   const btnMenuSelectAll = document.getElementById('menu-item-select-all');
   const btnMenuClear = document.getElementById('menu-item-clear');
-
-  function closeContextMenu() {
-    if (contextMenu) contextMenu.classList.add('hidden');
-  }
 
   terminalContainer.addEventListener('contextmenu', (e) => {
     if (isMobileDevice()) return;
@@ -820,10 +989,6 @@ export function initTerminal(onInput, onResize) {
     if (contextMenu && !contextMenu.contains(e.target)) {
       closeContextMenu();
     }
-  });
-
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeContextMenu();
   });
 
   if (btnMenuCopy) {
