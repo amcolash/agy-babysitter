@@ -19,9 +19,10 @@ const drawerDailyText = document.getElementById('drawer-daily-text');
 const drawer7dBar = document.getElementById('drawer-7d-bar');
 const drawer7dText = document.getElementById('drawer-7d-text');
 
-function getDailyColor(pct) {
-  if (pct >= 67) return { bg: 'bg-[#98be65]', text: 'text-[#98be65]' };
-  if (pct >= 34) return { bg: 'bg-[#ECBE7B]', text: 'text-[#ECBE7B]' };
+function getDailyColor(pct, todayAllowance = 1.0) {
+  const rel = todayAllowance && todayAllowance > 0 ? (pct / (todayAllowance * 100)) * 100 : pct;
+  if (rel >= 67) return { bg: 'bg-[#98be65]', text: 'text-[#98be65]' };
+  if (rel >= 34) return { bg: 'bg-[#ECBE7B]', text: 'text-[#ECBE7B]' };
   return { bg: 'bg-[#ff6c6b]', text: 'text-[#ff6c6b]' };
 }
 
@@ -41,7 +42,7 @@ export function renderQuota(quota) {
   if (dailyLeft && typeof dailyLeft.percentage === 'number') {
     const dailyPct = dailyLeft.percentage;
     const barPct = Math.max(0, Math.min(100, dailyPct));
-    const colors = getDailyColor(dailyPct);
+    const colors = getDailyColor(dailyPct, dailyLeft.todayAllowance);
 
     if (quotaDailyBar) {
       quotaDailyBar.style.width = `${barPct}%`;
@@ -138,54 +139,10 @@ function formatRelativeTime(resetIso) {
   return 'in <1m';
 }
 
-export function calculateDailyLeft(qwk, atTimestamp = Date.now()) {
-  const remainingFraction = qwk?.remaining_fraction ?? qwk?.remainingFraction;
-  const resetTime = qwk?.reset_time ?? qwk?.resetTime;
-
-  if (typeof remainingFraction !== 'number' || !resetTime || resetTime === 'null') {
-    return null;
-  }
-  const resetDate = new Date(resetTime);
-  if (isNaN(resetDate.getTime())) return null;
-
-  // start_dt = reset_dt - timedelta(days=7)
-  const startDate = new Date(resetDate.getTime() - 7 * 86400 * 1000);
-  const nowDate = new Date(atTimestamp);
-
-  // Difference in calendar dates in the local timezone (resets at midnight in local time)
-  const startLocalMidnight = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-  const nowLocalMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
-  const diffDays = Math.round((nowLocalMidnight.getTime() - startLocalMidnight.getTime()) / 86400000);
-
-  let dayNum = diffDays + 1;
-  if (dayNum > 7) dayNum = 7;
-  if (dayNum < 1) dayNum = 1;
-
-  const usedFraction = 1.0 - remainingFraction;
-  const usedDays = usedFraction * 7.0;
-
-  let dailyLeftDays = dayNum - usedDays;
-  const totalRemDays = remainingFraction * 7.0;
-  if (dailyLeftDays > totalRemDays) {
-    dailyLeftDays = totalRemDays;
-  }
-
-  const dailyPct = dailyLeftDays * 100.0;
-  return {
-    percentage: parseFloat(dailyPct.toFixed(2)),
-    remainingDays: parseFloat(dailyLeftDays.toFixed(2)),
-    dayNum
-  };
-}
-
 function tickQuotaTimes() {
   if (!currentQuota) return;
   if (currentQuota.quota7d?.resetTime) {
     currentQuota.quota7d.resetRelative = formatRelativeTime(currentQuota.quota7d.resetTime);
-    const newDaily = calculateDailyLeft(currentQuota.quota7d);
-    if (newDaily) {
-      currentQuota.dailyLeft = newDaily;
-    }
   }
   if (currentQuota.quota5h?.resetTime) {
     currentQuota.quota5h.resetRelative = formatRelativeTime(currentQuota.quota5h.resetTime);
@@ -204,13 +161,12 @@ export async function initQuota() {
     }
   } catch (e) {}
 
-  // Periodic refresh for relative countdowns and clock advancement
+  // Periodic refresh for relative countdowns
   setInterval(tickQuotaTimes, 15000);
 }
 
 export default {
   initQuota,
   renderQuota,
-  handleServerQuota,
-  calculateDailyLeft
+  handleServerQuota
 };
