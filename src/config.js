@@ -138,6 +138,8 @@ export const ALLOWED_DIRECTORIES = parseAllowedDirectories(process.env.ALLOWED_D
 export const DEFAULT_CWD = resolveTilde(process.env.DEFAULT_CWD || ALLOWED_DIRECTORIES[0] || os.homedir());
 
 export const WAKELOCK_TIMEOUT_MINUTES = parseInt(process.env.WAKELOCK_TIMEOUT_MINUTES, 10) || 20;
+export const WAKELOCK_WHAT = process.env.WAKELOCK_WHAT || 'idle';
+export const WAKELOCK_ENABLED = process.env.WAKELOCK_ENABLED !== 'false';
 
 export default {
   PORT,
@@ -146,5 +148,7 @@ export default {
   DEFAULT_COMMAND,
   ALLOWED_DIRECTORIES,
   DEFAULT_CWD,
-  WAKELOCK_TIMEOUT_MINUTES
+  WAKELOCK_TIMEOUT_MINUTES,
+  WAKELOCK_WHAT,
+  WAKELOCK_ENABLED
 };

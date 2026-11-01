@@ -14,13 +14,17 @@ function spawnWakelockProcess() {
   // Always clean up any existing duplicate or orphan wakelocks first
   stopAllWakelocks();
 
+  if (!config.WAKELOCK_ENABLED) {
+    return null;
+  }
+
   const platform = os.platform();
   let cmd = null;
   let args = [];
 
   if (platform === 'linux') {
     cmd = 'systemd-inhibit';
-    args = ['--what=idle:sleep', '--who=agy-babysitter', '--why=Active notification session', 'sleep', 'infinity'];
+    args = [`--what=${config.WAKELOCK_WHAT || 'idle'}`, '--who=agy-babysitter', '--why=Active notification session', 'sleep', 'infinity'];
   } else if (platform === 'darwin') {
     cmd = 'caffeinate';
     args = ['-d', '-i', '-m', '-u', '-w', String(process.pid)];
@@ -52,10 +56,11 @@ function spawnWakelockProcess() {
  * Starts or ensures the wakelock process is running
  */
 export function startWakelock() {
+  if (!config.WAKELOCK_ENABLED) return;
   if (!wakelockProcess) {
     wakelockProcess = spawnWakelockProcess();
     if (wakelockProcess) {
-      console.log(`[Wakelock] Active (inhibiting system sleep for ${config.WAKELOCK_TIMEOUT_MINUTES || 20}m)`);
+      console.log(`[Wakelock] Active (inhibiting system ${config.WAKELOCK_WHAT || 'idle'} for ${config.WAKELOCK_TIMEOUT_MINUTES || 20}m)`);
     }
   }
 }
@@ -134,6 +139,7 @@ export function stopAllWakelocks() {
  * @param {boolean} [force=false] Force immediate reset without throttle
  */
 export function touchWakelock(force = false) {
+  if (!config.WAKELOCK_ENABLED) return;
   const now = Date.now();
   lastActiveTimestamp = now;
 
@@ -165,6 +171,8 @@ export function getWakelockStatus() {
     ? Math.max(0, TIMEOUT_MS - (Date.now() - lastActiveTimestamp))
     : 0;
   return {
+    enabled: config.WAKELOCK_ENABLED,
+    what: config.WAKELOCK_WHAT || 'idle',
     active: !!wakelockProcess,
     timeoutMinutes: config.WAKELOCK_TIMEOUT_MINUTES || 20,
     lastActive: lastActiveTimestamp ? new Date(lastActiveTimestamp).toISOString() : null,
