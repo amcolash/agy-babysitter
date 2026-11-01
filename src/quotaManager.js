@@ -31,11 +31,63 @@ export function formatRelativeTime(resetIso) {
   return 'in <1m';
 }
 
-export function isSameOrLaterCalendarDay(dateA, dateB) {
-  // dateA >= dateB in calendar day
-  const midnightA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate()).getTime();
-  const midnightB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate()).getTime();
-  return midnightA > midnightB;
+export function computeDailyLeft(quota7d, atTimestamp = Date.now()) {
+  const remFraction = quota7d?.remainingFraction ?? (1 - (quota7d?.usedPercentage ?? 0) / 100);
+  const resetIso = quota7d?.resetTime;
+  if (!resetIso || typeof remFraction !== 'number') return null;
+
+  const resetDt = new Date(resetIso);
+  if (isNaN(resetDt.getTime())) return null;
+
+  const startDt = new Date(resetDt.getTime() - 7 * 86400 * 1000);
+  const nowDt = new Date(atTimestamp);
+
+  const startDate = new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate());
+  const resetDate = new Date(resetDt.getFullYear(), resetDt.getMonth(), resetDt.getDate());
+  const nowDate = new Date(nowDt.getFullYear(), nowDt.getMonth(), nowDt.getDate());
+
+  let todayAllowance = 1.0;
+  let accumBudget = 1.0;
+
+  if (resetDt.getHours() === 0 && resetDt.getMinutes() === 0 && resetDt.getSeconds() === 0) {
+    let dayNum = Math.round((nowDate.getTime() - startDate.getTime()) / 86400000) + 1;
+    dayNum = Math.max(1, Math.min(7, dayNum));
+    todayAllowance = 1.0;
+    accumBudget = dayNum;
+  } else {
+    const startNextMidnight = new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate() + 1);
+    const day0Allowance = (startNextMidnight.getTime() - startDt.getTime()) / 86400000;
+
+    const resetMidnight = new Date(resetDt.getFullYear(), resetDt.getMonth(), resetDt.getDate());
+    const dayLastAllowance = (resetDt.getTime() - resetMidnight.getTime()) / 86400000;
+
+    if (nowDt >= resetDt || nowDate.getTime() >= resetDate.getTime()) {
+      todayAllowance = dayLastAllowance;
+      accumBudget = 7.0;
+    } else if (nowDate.getTime() <= startDate.getTime()) {
+      todayAllowance = day0Allowance;
+      accumBudget = day0Allowance;
+    } else {
+      const fullDaysPassed = Math.round((nowDate.getTime() - startDate.getTime()) / 86400000);
+      todayAllowance = 1.0;
+      accumBudget = Math.min(7.0, day0Allowance + fullDaysPassed * 1.0);
+    }
+  }
+
+  const usedFraction = 1.0 - remFraction;
+  const usedDays = usedFraction * 7.0;
+  let dailyLeftDays = accumBudget - usedDays;
+  const totalRemDays = remFraction * 7.0;
+  if (dailyLeftDays > totalRemDays) {
+    dailyLeftDays = totalRemDays;
+  }
+  const dailyPct = dailyLeftDays * 100.0;
+
+  return {
+    percentage: parseFloat(dailyPct.toFixed(2)),
+    remainingDays: parseFloat(dailyLeftDays.toFixed(2)),
+    todayAllowance: parseFloat(todayAllowance.toFixed(2))
+  };
 }
 
 export function mergeQuota(current, incoming) {
@@ -89,34 +141,12 @@ export function mergeQuota(current, incoming) {
     result.quota7d = incoming.quota7d || current.quota7d;
   }
 
-  // 2. Daily Left: Only allow larger quota after reset periods (new calendar day or weekly cycle roll)
-  if (current.dailyLeft && incoming.dailyLeft) {
-    const currentReset7d = current.quota7d?.resetTime ? new Date(current.quota7d.resetTime).getTime() : NaN;
-    const incomingReset7d = incoming.quota7d?.resetTime ? new Date(incoming.quota7d.resetTime).getTime() : NaN;
-    const weeklyRefreshed = !isNaN(incomingReset7d) && !isNaN(currentReset7d) && incomingReset7d > currentReset7d;
-
-    const lastUpdated = current.updatedAt ? new Date(current.updatedAt) : new Date(0);
-    const now = new Date();
-    const isNewDay = isSameOrLaterCalendarDay(now, lastUpdated);
-
-    if (weeklyRefreshed || isNewDay) {
-      result.dailyLeft = incoming.dailyLeft;
-    } else {
-      // Within the same day and weekly cycle: quota can only decrease (or stay same)
-      const currPct = typeof current.dailyLeft.percentage === 'number' ? current.dailyLeft.percentage : 100;
-      const incPct = typeof incoming.dailyLeft.percentage === 'number' ? incoming.dailyLeft.percentage : 100;
-      const minPct = Math.min(currPct, incPct);
-
-      const currRemDays = typeof current.dailyLeft.remainingDays === 'number' ? current.dailyLeft.remainingDays : 1;
-      const incRemDays = typeof incoming.dailyLeft.remainingDays === 'number' ? incoming.dailyLeft.remainingDays : 1;
-      const minRemDays = Math.min(currRemDays, incRemDays);
-
-      result.dailyLeft = {
-        ...incoming.dailyLeft,
-        percentage: parseFloat(minPct.toFixed(2)),
-        remainingDays: parseFloat(minRemDays.toFixed(2))
-      };
-    }
+  // 2. Daily Left: compute dynamically from quota7d and current local calendar day
+  // Since quota7d is monotonic within a cycle, computeDailyLeft will monotonically decrease during
+  // each calendar day and naturally step up at midnight when the new calendar day begins.
+  if (result.quota7d) {
+    const computedDaily = computeDailyLeft(result.quota7d, Date.now());
+    result.dailyLeft = computedDaily || incoming.dailyLeft || current.dailyLeft;
   } else {
     result.dailyLeft = incoming.dailyLeft || current.dailyLeft;
   }
