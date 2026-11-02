@@ -1,4 +1,5 @@
 import {
+  SCAN_PORT,
   getSavedServers,
   saveDiscoveredServer,
   getCustomSubnet,
@@ -107,12 +108,15 @@ function renderKnownServers() {
 
 /**
  * Navigate to the local server target.
- * @param {string} hostPort e.g. "192.168.1.150:8080"
+ * Preserves query params and hash so session state is maintained.
+ * @param {string} hostPort e.g. "localhost:8080" or "192.168.1.150:8080"
  */
 export function connectToLocalTarget(hostPort) {
   if (!hostPort) return;
   saveDiscoveredServer(hostPort);
-  const targetUrl = `http://${hostPort}`;
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
+  const targetUrl = `http://${hostPort}/${search}${hash}`;
   showToast(`Connecting to ${hostPort}...`, 'info');
   setTimeout(() => {
     window.location.href = targetUrl;
@@ -121,12 +125,25 @@ export function connectToLocalTarget(hostPort) {
 
 /**
  * Update UI when a server is discovered.
+ * If the server is localhost, automatically reconnects.
+ * For mDNS, subnets, or other LAN targets, prompts the user to confirm.
  */
 function handleServerFound(server) {
   currentFoundTarget = server.hostPort;
   if (localScanStatusBox) localScanStatusBox.classList.add('hidden');
   if (modalScanStatusBox) modalScanStatusBox.classList.add('hidden');
 
+  const isLocalhost = server.hostPort === 'localhost' || server.hostPort.startsWith('localhost:');
+
+  // Automatically reconnect if localhost is found
+  if (isLocalhost) {
+    showToast(`Found server on localhost, reconnecting automatically...`, 'success');
+    renderKnownServers();
+    connectToLocalTarget(server.hostPort);
+    return;
+  }
+
+  // Non-localhost targets (mDNS, LAN subnets, etc.) should not be automatic
   if (localServerFoundBox) {
     localServerFoundBox.classList.remove('hidden');
     if (localServerFoundTitle) {
@@ -179,8 +196,96 @@ export async function triggerAutoScan(options = {}) {
   }
 }
 
+let isCheckingLocalhost = false;
+let isRedirectingToLocalhost = false;
+
+/**
+ * Rapid probe via WebSocket as a fallback if mixed content or PNA restricts HTTP fetch.
+ */
+function probeLocalhostWebSocket(timeoutMs = 800) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let ws = null;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        if (ws) {
+          try { ws.close(); } catch (e) {}
+        }
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    try {
+      ws = new WebSocket(`ws://localhost:${SCAN_PORT}/ws`);
+      ws.onopen = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          try { ws.close(); } catch (e) {}
+          resolve(true);
+        }
+      };
+      ws.onerror = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
+      };
+      ws.onclose = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
+      };
+    } catch (e) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(false);
+      }
+    }
+  });
+}
+
+/**
+ * Checks localhost immediately and auto-reconnects if available.
+ * Called immediately whenever a connection drops or "Connecting to Server..." appears.
+ */
+export async function checkAndAutoConnectLocalhost() {
+  if (typeof window === 'undefined') return false;
+  if (window.location.hostname === 'localhost') return false;
+  if (isCheckingLocalhost || isRedirectingToLocalhost) return false;
+
+  isCheckingLocalhost = true;
+  try {
+    // Probe 1: HTTP API probe with CORS & Private Network Access
+    const res = await probeServer(`localhost:${SCAN_PORT}`, 800);
+    if (res && (res.hostPort === 'localhost' || res.hostPort.startsWith('localhost:'))) {
+      isRedirectingToLocalhost = true;
+      handleServerFound(res);
+      return true;
+    }
+
+    // Probe 2: WebSocket probe (bypasses mixed content/CORS restrictions in Chrome)
+    const wsAlive = await probeLocalhostWebSocket(800);
+    if (wsAlive) {
+      isRedirectingToLocalhost = true;
+      handleServerFound({ hostPort: `localhost:${SCAN_PORT}`, hostname: null, app: 'agy-babysitter' });
+      return true;
+    }
+  } catch (err) {
+  } finally {
+    isCheckingLocalhost = false;
+  }
+  return false;
+}
+
 /**
  * Schedule automated scan ~10s after disconnect or immediately if initial boot failed.
+ * Immediately checks localhost when outside localhost for fast automatic reconnects.
  * @param {boolean} immediate
  */
 export function scheduleAutoScan(immediate = false) {
@@ -188,6 +293,11 @@ export function scheduleAutoScan(immediate = false) {
   if (immediate) {
     triggerAutoScan();
   } else {
+    // If not currently on localhost, probe localhost immediately for automatic reconnect
+    if (window.location.hostname !== 'localhost') {
+      checkAndAutoConnectLocalhost();
+    }
+
     autoScanTimeout = setTimeout(() => {
       triggerAutoScan();
     }, 10000); // 10 seconds after disconnect

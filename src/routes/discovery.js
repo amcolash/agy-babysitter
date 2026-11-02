@@ -10,8 +10,14 @@ const TRANSPARENT_1PX_PNG = Buffer.from(
   'base64'
 );
 
-function setDiscoveryHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function setDiscoveryHeaders(req, res) {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
@@ -19,11 +25,27 @@ function setDiscoveryHeaders(res) {
 }
 
 /**
+ * OPTIONS /api/discovery
+ */
+router.options('/discovery', (req, res) => {
+  setDiscoveryHeaders(req, res);
+  res.sendStatus(204);
+});
+
+/**
+ * OPTIONS /api/discovery.png
+ */
+router.options('/discovery.png', (req, res) => {
+  setDiscoveryHeaders(req, res);
+  res.sendStatus(204);
+});
+
+/**
  * GET /api/discovery
  * Lightweight JSON response indicating this server is agy-babysitter
  */
 router.get('/discovery', (req, res) => {
-  setDiscoveryHeaders(res);
+  setDiscoveryHeaders(req, res);
   res.json({
     app: 'agy-babysitter',
     version: '1.0.0',
@@ -39,7 +61,7 @@ router.get('/discovery', (req, res) => {
  * 1x1 transparent image ping for image probe scanners
  */
 router.get('/discovery.png', (req, res) => {
-  setDiscoveryHeaders(res);
+  setDiscoveryHeaders(req, res);
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Content-Length', TRANSPARENT_1PX_PNG.length);
   res.end(TRANSPARENT_1PX_PNG);

@@ -5,7 +5,7 @@ import { handleServerQuota } from './quota.js';
 import { setFabDisabled } from './actions.js';
 import { setInputModalEnabled } from './inputModal.js';
 import { clearAppCacheAndReload } from './settings.js';
-import { scheduleAutoScan, clearAutoScanTimer, resetDiscoveryState } from './discoveryUI.js';
+import { scheduleAutoScan, clearAutoScanTimer, resetDiscoveryState, checkAndAutoConnectLocalhost } from './discoveryUI.js';
 
 // Full-screen Disconnected / Updating State Overlay
 const disconnectedOverlay = document.getElementById('server-disconnected-state');
@@ -168,6 +168,11 @@ export function updateStatus(state, message) {
   setFabDisabled(!isConnected);
   setTerminalInputEnabled(isConnected);
   setInputModalEnabled(isConnected);
+
+  // If we see connecting / reconnecting / disconnected states outside localhost, check localhost immediately
+  if (!isConnected && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    checkAndAutoConnectLocalhost();
+  }
 }
 
 export function getCurrentSession() {
@@ -200,11 +205,17 @@ export function disconnectTerminal() {
 }
 
 export function startPollingServerOnline() {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    checkAndAutoConnectLocalhost();
+  }
   if (isPollingForOnline) return;
   isPollingForOnline = true;
   let delay = 1000;
 
   const checkOnline = async () => {
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+      checkAndAutoConnectLocalhost();
+    }
     try {
       const res = await fetch('/api/sessions', { cache: 'no-store', credentials: 'include' });
       // If redirected to an auth login page (e.g. Cloudflare Access), navigate to login
@@ -249,6 +260,9 @@ if (typeof window !== 'undefined') {
 }
 
 export function scheduleReconnect(sessionName) {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    checkAndAutoConnectLocalhost();
+  }
   if (reconnectTimer) return;
   const targetSession = sessionName || currentSession;
 

@@ -17,7 +17,7 @@ const DEFAULT_SUBNETS = [
   '172.20.10'    // iOS personal hotspot
 ];
 
-const SCAN_PORT = 8080;
+export const SCAN_PORT = 8080;
 const PING_TIMEOUT_MS = 1400;
 const BATCH_SIZE = 25;
 
@@ -26,7 +26,7 @@ let abortScanController = null;
 
 /**
  * Get previously saved local servers from localStorage.
- * Returns an array of strings like ["192.168.1.150:8080", "cachyos-x8664.local:8080"]
+ * Returns an array of strings like ["localhost:8080", "192.168.1.150:8080", "cachyos-x8664.local:8080"]
  * @returns {string[]}
  */
 export function getSavedServers() {
@@ -175,18 +175,20 @@ export async function runLocalScan(options = {}) {
   const onProgress = options.onProgress || (() => {});
 
   try {
-    // Phase 1: Check known servers from localStorage and direct targets
+    // Phase 1: Check known servers from localStorage, loopback targets, and local mDNS hostnames
     const directTargets = [
       ...(options.directTargets || []),
+      `localhost:${SCAN_PORT}`,
       ...getSavedServers(),
-      'cachyos-x8664.local:8080' // System hostname mDNS candidate
+      `cachyos-x8664.local:${SCAN_PORT}`, // System hostname mDNS candidate
+      `cachyos.local:${SCAN_PORT}`
     ];
 
     const uniqueTargets = [...new Set(directTargets.filter(Boolean))];
 
     for (const target of uniqueTargets) {
       if (signal.aborted) return null;
-      onProgress(`Checking saved server: ${target}...`, target);
+      onProgress(`Checking server: ${target}...`, target);
       const res = await probeServer(target, 1000);
       if (res) {
         isScanningActive = false;
