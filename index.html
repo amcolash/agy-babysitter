@@ -172,8 +172,17 @@
               title="Click to switch sessions"
               class="hidden group flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1b2229] hover:bg-[#282c34] active:bg-[#1b2229] border border-[#3f444a] hover:border-[#51afef]/60 text-xs text-[#DFDFDF] transition shadow-xs cursor-pointer max-w-[200px] sm:max-w-[320px] min-w-0"
             >
-              <span id="header-status-dot" class="dot disconnected status-dot flex-shrink-0"></span>
               <span id="current-session-label" class="font-bold tracking-tight truncate">session</span>
+              <span
+                id="header-bg-notif-badge"
+                class="hidden flex-shrink-0 items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#ECBE7B]/15 text-[#ECBE7B] border border-[#ECBE7B]/40 text-[10px] font-bold animate-pulse hover:bg-[#ECBE7B]/25 transition"
+                title="Background session notification - tap to jump"
+              >
+                <svg class="w-2.5 h-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span id="header-bg-notif-count">0</span>
+              </span>
             </button>
           </div>
 

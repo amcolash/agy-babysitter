@@ -31,6 +31,8 @@ const emptySessionState = document.getElementById("empty-session-state");
 const btnEmptyNewSession = document.getElementById("btn-empty-new-session");
 const headerSessionBadge = document.getElementById("header-session-badge");
 const currentSessionLabel = document.getElementById("current-session-label");
+const headerBgNotifBadge = document.getElementById("header-bg-notif-badge");
+const headerBgNotifCount = document.getElementById("header-bg-notif-count");
 const desktopTabsList = document.getElementById("desktop-tabs-list");
 const btnDesktopNewSession = document.getElementById("btn-desktop-new-session");
 
@@ -820,25 +822,62 @@ export function updateSessionTabIcons() {
     });
   }
 
+  // Count notifications across sessions
+  let totalNotifCount = 0;
+  let bgNotifCount = 0;
+  activeSessionsList.forEach((s) => {
+    const notif = getSessionNotification(s.name);
+    if (notif) {
+      totalNotifCount++;
+      if (s.name !== current) {
+        bgNotifCount++;
+      }
+    }
+  });
+
+  // Update drawer session count with background alert summary
+  if (drawerSessionCount) {
+    if (bgNotifCount > 0) {
+      drawerSessionCount.className =
+        "text-[10px] px-1.5 py-0.5 rounded bg-[#ECBE7B]/15 text-[#ECBE7B] border border-[#ECBE7B]/40 font-bold";
+      drawerSessionCount.textContent = `${activeSessionsList.length} • ${bgNotifCount} alert${bgNotifCount > 1 ? "s" : ""}`;
+    } else {
+      drawerSessionCount.className =
+        "text-[10px] px-1.5 py-0.5 rounded bg-[#1b2229] text-[#5B6268] border border-[#3f444a]";
+      drawerSessionCount.textContent = String(activeSessionsList.length);
+    }
+  }
+
   // Update current session badge
   if (currentSessionLabel && current) {
     currentSessionLabel.textContent = getSessionDisplayName(current);
   }
 
-  // Update mobile header capsule indicator
-  const headerStatusDot = document.getElementById("header-status-dot");
-  if (headerStatusDot) {
-    const currentNotif = current ? getSessionNotification(current) : null;
-    if (currentNotif) {
-      headerStatusDot.innerHTML = `<svg class="w-3.5 h-3.5 pointer-events-none text-[#ECBE7B]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>`;
-      headerStatusDot.className = "w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center";
+  // Update mobile header background notification badge (only when notif is NOT for current session)
+  if (headerBgNotifBadge) {
+    if (bgNotifCount > 0) {
+      headerBgNotifBadge.classList.remove("hidden");
+      headerBgNotifBadge.classList.add("flex");
+      if (headerBgNotifCount) {
+        headerBgNotifCount.textContent = String(bgNotifCount);
+      }
+      headerBgNotifBadge.title = `${bgNotifCount} background notification${bgNotifCount > 1 ? "s" : ""} - tap to jump`;
     } else {
-      headerStatusDot.innerHTML = "";
-      const isPaused = headerStatusDot.classList.contains("paused");
-      const isDisconnected = headerStatusDot.classList.contains("disconnected");
-      const isConnecting = headerStatusDot.classList.contains("connecting");
-      const stateClass = isPaused ? "paused" : isDisconnected ? "disconnected" : isConnecting ? "connecting" : "connected";
-      headerStatusDot.className = `dot ${stateClass} status-dot flex-shrink-0`;
+      headerBgNotifBadge.classList.add("hidden");
+      headerBgNotifBadge.classList.remove("flex");
+    }
+  }
+
+  // Highlight header capsule border if background notification is active
+  if (headerSessionBadge) {
+    if (bgNotifCount > 0) {
+      headerSessionBadge.classList.add("border-[#ECBE7B]/50", "shadow-[0_0_6px_rgba(236,190,123,0.2)]");
+      headerSessionBadge.classList.remove("border-[#3f444a]");
+      headerSessionBadge.title = `${bgNotifCount} background notification${bgNotifCount > 1 ? "s" : ""} - click to switch`;
+    } else {
+      headerSessionBadge.classList.add("border-[#3f444a]");
+      headerSessionBadge.classList.remove("border-[#ECBE7B]/50", "shadow-[0_0_6px_rgba(236,190,123,0.2)]");
+      headerSessionBadge.title = "Click to switch sessions";
     }
   }
 }
@@ -1060,6 +1099,21 @@ export function initSessions() {
       e.preventDefault();
       e.stopPropagation();
       openDrawer();
+    });
+  }
+
+  if (headerBgNotifBadge) {
+    headerBgNotifBadge.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const notifiedSession = activeSessionsList.find(
+        (s) => s.name !== getCurrentSession() && getSessionNotification(s.name)
+      );
+      if (notifiedSession) {
+        switchToSession(notifiedSession.name);
+      } else {
+        openDrawer();
+      }
     });
   }
 
