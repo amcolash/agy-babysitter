@@ -15,6 +15,7 @@ import {
   sanitizeSessionName,
   applyTmuxGlobalOptions
 } from './tmuxManager.js';
+import { addRecentSession } from './recentSessions.js';
 
 // Ensure normal interactive scheduling for the CLI process
 try {
@@ -102,6 +103,7 @@ function attachSession(sessionName, cwd, command) {
   if (!hasSession(name)) {
     createSession({ name, cwd: targetCwd, command });
   } else {
+    addRecentSession({ name, cwd: targetCwd, command });
     applyTmuxGlobalOptions(name);
   }
 

@@ -1,4 +1,4 @@
-import { connectTerminal } from './socket.js';
+import { connectTerminal, getCurrentSession } from './socket.js';
 import { loadSessions, computeUniqueSessionName, getActiveSessions, switchToSession } from './sessions.js';
 import { showToast } from './toast.js';
 import { safeFetchJson } from './api.js';
@@ -38,7 +38,7 @@ export function setSelectedCwd(folderPath, displayName = null, baseFolderName = 
 }
 
 export async function loadRecentSessions() {
-  if (!recentSessionsContainer || !recentSessionsList) return;
+  if (!recentSessionsContainer || !recentSessionsList) return [];
   try {
     const data = await safeFetchJson('/api/sessions/recent?limit=4');
     const recent = data.recent || [];
@@ -46,7 +46,7 @@ export async function loadRecentSessions() {
     if (recent.length === 0) {
       recentSessionsContainer.classList.add('hidden');
       recentSessionsList.innerHTML = '';
-      return;
+      return [];
     }
 
     recentSessionsList.innerHTML = '';
@@ -73,8 +73,10 @@ export async function loadRecentSessions() {
     });
 
     recentSessionsContainer.classList.remove('hidden');
+    return recent;
   } catch (err) {
     recentSessionsContainer.classList.add('hidden');
+    return [];
   }
 }
 
@@ -99,15 +101,50 @@ function applyRecentFolder(folderEntry) {
   newSessionNameInput.focus();
 }
 
+function getLatestDirectory(recentList = []) {
+  // 1. Current active session
+  const currentSessionName = getCurrentSession();
+  const activeSessions = getActiveSessions();
+  const currentSession = activeSessions.find((s) => s.name === currentSessionName);
+  if (currentSession && currentSession.cwd) {
+    return { cwd: currentSession.cwd, command: currentSession.command };
+  }
+
+  // 2. Most recent session from history
+  if (recentList && recentList.length > 0 && recentList[0].cwd) {
+    return { cwd: recentList[0].cwd, command: recentList[0].command };
+  }
+
+  // 3. Any active session
+  if (activeSessions.length > 0 && activeSessions[0].cwd) {
+    return { cwd: activeSessions[0].cwd, command: activeSessions[0].command };
+  }
+
+  // 4. Default CWD from server config
+  if (defaultCwd) {
+    return { cwd: defaultCwd, command: null };
+  }
+
+  return null;
+}
+
 let modalOpenedAt = 0;
 
-export function openModal() {
+export async function openModal() {
   modalOpenedAt = Date.now();
   modalOverlay.classList.remove('hidden');
   pickerSearchInput.value = '';
-  loadSessions();
-  loadAllowedDirectories();
-  loadRecentSessions();
+
+  try {
+    const [_, recent] = await Promise.all([
+      loadSessions(null, false),
+      loadRecentSessions()
+    ]);
+    await loadAllowedDirectories(recent);
+  } catch (err) {
+    // Graceful error handling in individual loaders
+  }
+
   if (newSessionNameInput) {
     newSessionNameInput.focus();
     newSessionNameInput.select();
@@ -121,19 +158,36 @@ export function closeModal() {
   }
 }
 
-export async function loadAllowedDirectories() {
+export async function loadAllowedDirectories(recentList = null) {
   pickerFolderList.innerHTML = '<div class="picker-loading text-xs text-[#5B6268] p-3 text-center">Loading allowed directories...</div>';
   try {
     const data = await safeFetchJson('/api/directories');
     allowedRoots = data.roots || [];
 
     const allFolders = allowedRoots.flatMap((r) => r.folders || []);
-    const isValidSelected = allFolders.some((f) => f.path === selectedCwd);
+    const latest = getLatestDirectory(recentList);
+    const targetCwd = latest ? latest.cwd : null;
 
-    if (isValidSelected) {
-      const rootIdx = allowedRoots.findIndex((r) => (r.folders || []).some((f) => f.path === selectedCwd));
-      if (rootIdx !== -1) {
-        activeRootIndex = rootIdx;
+    let matchedFolder = null;
+    let matchedRootIdx = -1;
+
+    if (targetCwd) {
+      for (let i = 0; i < allowedRoots.length; i++) {
+        const root = allowedRoots[i];
+        const folder = (root.folders || []).find((f) => f.path === targetCwd);
+        if (folder) {
+          matchedFolder = folder;
+          matchedRootIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (matchedFolder && matchedRootIdx !== -1) {
+      activeRootIndex = matchedRootIdx;
+      setSelectedCwd(matchedFolder.path, matchedFolder.displayPath || matchedFolder.name, matchedFolder.name);
+      if (latest && latest.command) {
+        newSessionCommandInput.value = latest.command;
       }
     } else {
       // Find first root with at least one folder, or fallback to 0
@@ -219,6 +273,11 @@ function renderFolderList() {
     });
     pickerFolderList.appendChild(item);
   });
+
+  const activeItem = pickerFolderList.querySelector('.picker-item.active');
+  if (activeItem) {
+    activeItem.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 export async function initInfo() {

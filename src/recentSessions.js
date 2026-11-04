@@ -53,7 +53,7 @@ export function saveRecentSessions(sessions) {
  * @param {string} [entry.command]
  * @returns {Array<Object>}
  */
-export function addRecentSession(entryOrName, maybeCwd, maybeCommand) {
+export function addRecentSession(entryOrName, maybeCwd, maybeCommand, bump = true) {
   let name, cwd, command;
   if (typeof entryOrName === 'object' && entryOrName !== null) {
     name = entryOrName.name;
@@ -70,6 +70,13 @@ export function addRecentSession(entryOrName, maybeCwd, maybeCommand) {
   const resolvedCwd = resolveTilde(cwd);
   const currentList = loadRecentSessions();
 
+  if (!bump) {
+    const exists = currentList.some((item) => item.cwd === resolvedCwd);
+    if (exists) {
+      return currentList;
+    }
+  }
+
   // Deduplicate by cwd (only track the most recent session/entry per folder)
   const filtered = currentList.filter(
     (item) => item.cwd !== resolvedCwd
@@ -82,7 +89,12 @@ export function addRecentSession(entryOrName, maybeCwd, maybeCommand) {
     lastUsed: Date.now()
   };
 
-  filtered.unshift(newEntry);
+  if (!bump) {
+    filtered.push(newEntry);
+  } else {
+    filtered.unshift(newEntry);
+  }
+
   const trimmed = filtered.slice(0, MAX_RECENT_COUNT);
   saveRecentSessions(trimmed);
   return trimmed;

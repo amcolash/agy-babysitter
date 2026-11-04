@@ -36,10 +36,10 @@ export function listSessions() {
         };
       });
 
-    // Populate recent sessions cache with any active sessions
+    // Populate recent sessions cache with any untracked active sessions
     for (const s of list) {
       if (s.name && s.cwd) {
-        addRecentSession({ name: s.name, cwd: s.cwd });
+        addRecentSession({ name: s.name, cwd: s.cwd }, null, null, false);
       }
     }
 
@@ -212,6 +212,11 @@ export function attachPtySession({ sessionName, cols = 100, rows = 30 }) {
 
   if (!hasSession(name)) {
     throw new Error(`Session '${name}' not found`);
+  }
+
+  const session = getSession(name);
+  if (session && session.cwd) {
+    addRecentSession({ name: session.name, cwd: session.cwd });
   }
 
   applyTmuxGlobalOptions(name);
