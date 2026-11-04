@@ -137,6 +137,25 @@ export function removeSessionLabel(sessionName) {
 }
 
 /**
+ * Transfer label from an old session name to a new session name
+ * @param {string} oldName
+ * @param {string} newName
+ * @returns {Record<string, string>}
+ */
+export function renameSessionLabel(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return getSessionLabels();
+  const labels = { ...getSessionLabels() };
+  if (labels[oldName]) {
+    labels[newName] = labels[oldName];
+    delete labels[oldName];
+    cachedLabels = labels;
+    saveSessionLabels(labels);
+    notifyListeners(labels);
+  }
+  return labels;
+}
+
+/**
  * Prune labels for sessions that no longer exist
  * @param {string[]} validSessionNames 
  * @returns {Record<string, string>}

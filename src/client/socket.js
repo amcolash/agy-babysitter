@@ -1,6 +1,6 @@
 import { term, fitAddon, writeTerminal, handleTerminalResize, isMobileDevice, setTerminalInputEnabled } from './terminal.js';
 import { onTerminalDataReceived, clearSessionNotification, handleUserInteraction, markTurnStarted, onSessionConnected, onTerminalResized, handleServerSessionNotification, handleServerSessionNotificationsSync } from './notifications.js';
-import { handleServerSessionsChanged, handleServerSessionLabels, loadSessions } from './sessions.js';
+import { handleServerSessionsChanged, handleServerSessionLabels, handleServerSessionRenamed, loadSessions } from './sessions.js';
 import { handleServerQuota } from './quota.js';
 import { setFabDisabled } from './actions.js';
 import { setInputModalEnabled } from './inputModal.js';
@@ -393,6 +393,9 @@ export function connectTerminal(sessionName) {
           return;
         } else if (payload.type === 'sessions_changed' || payload.type === 'sessions_sync') {
           handleServerSessionsChanged(payload.sessions);
+          return;
+        } else if (payload.type === 'session_renamed') {
+          handleServerSessionRenamed(payload.oldName, payload.newName);
           return;
         } else if (payload.type === 'session_labels_changed' || payload.type === 'session_labels_sync') {
           handleServerSessionLabels(payload.labels);

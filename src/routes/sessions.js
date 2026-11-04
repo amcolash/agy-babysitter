@@ -1,11 +1,11 @@
 import express from 'express';
 import path from 'path';
 import config, { resolveTilde } from '../config.js';
-import { listSessions, createSession, terminateSession, getUniqueSessionName, hasSession } from '../tmuxManager.js';
+import { listSessions, createSession, terminateSession, renameSession, getUniqueSessionName, hasSession } from '../tmuxManager.js';
 import { isAllowedDirectory, formatDisplayPath } from './directories.js';
 import { getWakelockStatus } from '../wakelock.js';
 import { getRecentSessions } from '../recentSessions.js';
-import { broadcastSessionsList } from '../sessionMonitor.js';
+import { broadcastSessionsList, broadcastSessionRenamed, renameSessionTracking } from '../sessionMonitor.js';
 import { getSessionLabels, getSessionLabel, setSessionLabel, removeSessionLabel } from '../sessionLabels.js';
 
 const router = express.Router();
@@ -121,6 +121,30 @@ router.delete('/sessions/:name', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// API: Rename a session
+const handleRenameSession = async (req, res) => {
+  try {
+    const oldName = req.params.name;
+    const newName = (req.body && (req.body.newName || req.body.name)) || '';
+    if (!newName || typeof newName !== 'string' || !newName.trim()) {
+      return res.status(400).json({ error: 'New session name is required' });
+    }
+    const result = renameSession(oldName, newName.trim());
+    if (result.renamed) {
+      renameSessionTracking(result.oldName, result.name);
+      broadcastSessionRenamed(result.oldName, result.name);
+      broadcastSessionsList();
+    }
+    res.json({ success: true, oldName: result.oldName, name: result.name });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+router.post('/sessions/:name/rename', handleRenameSession);
+router.patch('/sessions/:name/rename', handleRenameSession);
+router.patch('/sessions/:name', handleRenameSession);
 
 // API: Suggest a unique session name for a directory path
 router.get('/suggest-session-name', async (req, res) => {

@@ -129,9 +129,32 @@ export function getRecentSessions(limit = 5) {
   }));
 }
 
+/**
+ * Rename a session in recent sessions history
+ * @param {string} oldName
+ * @param {string} newName
+ * @returns {Array<Object>}
+ */
+export function renameRecentSession(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return loadRecentSessions();
+  const currentList = loadRecentSessions();
+  let changed = false;
+  for (const item of currentList) {
+    if (item.name === oldName) {
+      item.name = newName;
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveRecentSessions(currentList);
+  }
+  return currentList;
+}
+
 export default {
   loadRecentSessions,
   saveRecentSessions,
   addRecentSession,
-  getRecentSessions
+  getRecentSessions,
+  renameRecentSession
 };

@@ -15,6 +15,7 @@ import { safeFetchJson } from "./api.js";
 import {
   getSessionNotification,
   clearSessionNotification,
+  renameSessionNotification,
   setNotificationChangeCallback,
   pruneSessionNotifications,
   onSessionFocused,
@@ -37,9 +38,20 @@ const desktopTabsList = document.getElementById("desktop-tabs-list");
 const btnDesktopNewSession = document.getElementById("btn-desktop-new-session");
 
 const tabContextMenu = document.getElementById("tab-context-menu");
+const tabMenuItemRename = document.getElementById("tab-menu-item-rename");
 const tabMenuItemLabel = document.getElementById("tab-menu-item-label");
 const tabMenuItemClose = document.getElementById("tab-menu-item-close");
 const tabMenuItemCloseOthers = document.getElementById("tab-menu-item-close-others");
+
+const renameModalOverlay = document.getElementById("rename-modal-overlay");
+const formRenameSession = document.getElementById("form-rename-session");
+const inputRenameSession = document.getElementById("input-rename-session");
+const renameModalTitle = document.getElementById("rename-modal-title");
+const renameModalSubtitle = document.getElementById("rename-modal-subtitle");
+const renameModalError = document.getElementById("rename-modal-error");
+const btnCloseRenameModal = document.getElementById("btn-close-rename-modal");
+const btnCancelRenameModal = document.getElementById("btn-cancel-rename-modal");
+const btnSubmitRenameModal = document.getElementById("btn-submit-rename-modal");
 
 const labelModalOverlay = document.getElementById("label-modal-overlay");
 const formSessionLabel = document.getElementById("form-session-label");
@@ -55,6 +67,7 @@ let isDrawerOpen = false;
 let draggedSessionName = null;
 let contextMenuTargetSession = null;
 let labelModalTargetSession = null;
+let renameModalTargetSession = null;
 
 const STORAGE_TAB_ORDER_KEY = "agy_tabs_order";
 const STORAGE_SESSION_LABELS_KEY = "agy_session_labels";
@@ -173,13 +186,92 @@ export function openTabContextMenu(clientX, clientY, sessionName) {
   }
 
   const menuWidth = 180;
-  const menuHeight = 130;
+  const menuHeight = 175;
   const x = Math.min(window.innerWidth - menuWidth - 10, Math.max(10, clientX));
   const y = Math.min(window.innerHeight - menuHeight - 10, Math.max(10, clientY));
 
   tabContextMenu.style.left = `${x}px`;
   tabContextMenu.style.top = `${y}px`;
   tabContextMenu.classList.remove("hidden");
+}
+
+export function openRenameModal(sessionName) {
+  if (!renameModalOverlay || !sessionName) return;
+  renameModalTargetSession = sessionName;
+  closeTabContextMenu();
+
+  if (renameModalTitle) {
+    renameModalTitle.textContent = `Rename '${sessionName}'`;
+  }
+  if (renameModalSubtitle) {
+    renameModalSubtitle.textContent = `Enter a new name for session '${sessionName}'`;
+  }
+  if (inputRenameSession) {
+    inputRenameSession.value = sessionName;
+  }
+  if (renameModalError) {
+    renameModalError.textContent = "";
+    renameModalError.classList.add("hidden");
+  }
+
+  renameModalOverlay.classList.remove("hidden");
+  setTimeout(() => {
+    if (inputRenameSession) {
+      inputRenameSession.focus();
+      inputRenameSession.select();
+    }
+  }, 50);
+}
+
+export function closeRenameModal() {
+  if (!renameModalOverlay) return;
+  renameModalOverlay.classList.add("hidden");
+  renameModalTargetSession = null;
+  if (renameModalError) {
+    renameModalError.textContent = "";
+    renameModalError.classList.add("hidden");
+  }
+  if (!isMobileDevice() && term) {
+    term.focus();
+  }
+}
+
+export function handleServerSessionRenamed(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+
+  // Update session name in activeSessionsList
+  const sessionItem = activeSessionsList.find((s) => s.name === oldName);
+  if (sessionItem) {
+    sessionItem.name = newName;
+  }
+
+  // Transfer session label
+  if (sessionLabels[oldName]) {
+    sessionLabels[newName] = sessionLabels[oldName];
+    delete sessionLabels[oldName];
+  }
+
+  // Transfer notifications
+  renameSessionNotification(oldName, newName);
+
+  // Update custom tab order in localStorage
+  const tabOrder = getCustomTabOrder();
+  const orderIdx = tabOrder.indexOf(oldName);
+  if (orderIdx !== -1) {
+    tabOrder[orderIdx] = newName;
+    saveCustomTabOrder(tabOrder);
+  }
+
+  // If this was the current session, update state and re-attach
+  if (getCurrentSession() === oldName) {
+    setCurrentSession(newName);
+    syncSessionToStorageAndUrl(newName);
+    updateStatus("connected", `Connected (${newName})`);
+    connectTerminal(newName);
+  }
+
+  // Re-render UI
+  renderSessions();
 }
 
 export function openLabelModal(sessionName) {
@@ -1163,6 +1255,16 @@ export function initSessions() {
   }
 
   // Tab Context Menu Item Handlers
+  if (tabMenuItemRename) {
+    tabMenuItemRename.addEventListener("click", () => {
+      const target = contextMenuTargetSession;
+      closeTabContextMenu();
+      if (target) {
+        openRenameModal(target);
+      }
+    });
+  }
+
   if (tabMenuItemLabel) {
     tabMenuItemLabel.addEventListener("click", () => {
       const target = contextMenuTargetSession;
@@ -1251,11 +1353,97 @@ export function initSessions() {
     });
   }
 
+  // Rename Modal handlers
+  if (formRenameSession) {
+    formRenameSession.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!renameModalTargetSession) {
+        closeRenameModal();
+        return;
+      }
+      const oldName = renameModalTargetSession;
+      const rawInput = inputRenameSession ? inputRenameSession.value.trim() : "";
+      const newName = sanitizeName(rawInput);
+
+      if (!newName) {
+        if (renameModalError) {
+          renameModalError.textContent = "Please enter a valid session name.";
+          renameModalError.classList.remove("hidden");
+        }
+        return;
+      }
+
+      if (newName === oldName) {
+        closeRenameModal();
+        return;
+      }
+
+      if (activeSessionsList.some((s) => s.name === newName)) {
+        if (renameModalError) {
+          renameModalError.textContent = `A session named '${newName}' already exists.`;
+          renameModalError.classList.remove("hidden");
+        }
+        return;
+      }
+
+      if (renameModalError) {
+        renameModalError.classList.add("hidden");
+      }
+      if (btnSubmitRenameModal) {
+        btnSubmitRenameModal.disabled = true;
+      }
+
+      try {
+        const res = await safeFetchJson(`/api/sessions/${encodeURIComponent(oldName)}/rename`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ newName }),
+        });
+
+        closeRenameModal();
+        const renamedName = res.name || newName;
+        handleServerSessionRenamed(oldName, renamedName);
+        showToast(`Renamed session to '${renamedName}'`, "success");
+      } catch (err) {
+        if (renameModalError) {
+          renameModalError.textContent = err.message || "Failed to rename session";
+          renameModalError.classList.remove("hidden");
+        } else {
+          showToast(`Error: ${err.message}`, "error");
+        }
+      } finally {
+        if (btnSubmitRenameModal) {
+          btnSubmitRenameModal.disabled = false;
+        }
+      }
+    });
+  }
+
+  if (btnCloseRenameModal) {
+    btnCloseRenameModal.addEventListener("click", closeRenameModal);
+  }
+
+  if (btnCancelRenameModal) {
+    btnCancelRenameModal.addEventListener("click", closeRenameModal);
+  }
+
+  if (renameModalOverlay) {
+    renameModalOverlay.addEventListener("click", (e) => {
+      if (e.target === renameModalOverlay) {
+        closeRenameModal();
+      }
+    });
+  }
+
   // Escape key closes context menu, label modal, or drawer
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (tabContextMenu && !tabContextMenu.classList.contains("hidden")) {
         closeTabContextMenu();
+        return;
+      }
+      if (renameModalOverlay && !renameModalOverlay.classList.contains("hidden")) {
+        closeRenameModal();
         return;
       }
       if (labelModalOverlay && !labelModalOverlay.classList.contains("hidden")) {

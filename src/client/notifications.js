@@ -213,6 +213,15 @@ export function clearSessionNotification(sessionName) {
   }
 }
 
+export function renameSessionNotification(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  if (sessionStates.has(oldName)) {
+    sessionStates.set(newName, sessionStates.get(oldName));
+    sessionStates.delete(oldName);
+    updatePageTitle();
+  }
+}
+
 export function handleServerSessionNotification(sessionName, state) {
   if (!sessionName) return;
   const s = getSessionState(sessionName);

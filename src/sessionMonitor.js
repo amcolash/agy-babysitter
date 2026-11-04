@@ -127,6 +127,52 @@ export function broadcastSessionsList(sessions = null) {
 }
 
 /**
+ * Broadcasts a session rename event to all connected WebSocket clients
+ * @param {string} oldName
+ * @param {string} newName
+ */
+export function broadcastSessionRenamed(oldName, newName) {
+  if (!wssInstance || !oldName || !newName) return;
+  const msg = JSON.stringify({
+    type: 'session_renamed',
+    oldName,
+    newName
+  });
+
+  wssInstance.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      if (client.sessionName === oldName) {
+        client.sessionName = newName;
+      }
+      try {
+        client.send(msg);
+      } catch (e) {}
+    }
+  });
+}
+
+/**
+ * Transfers notification state tracking when a session is renamed
+ * @param {string} oldName
+ * @param {string} newName
+ */
+export function renameSessionTracking(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  if (sessionStates.has(oldName)) {
+    sessionStates.set(newName, sessionStates.get(oldName));
+    sessionStates.delete(oldName);
+  }
+  if (pendingInputMisses.has(oldName)) {
+    pendingInputMisses.set(newName, pendingInputMisses.get(oldName));
+    pendingInputMisses.delete(oldName);
+  }
+  if (dismissedPromptSessions.has(oldName)) {
+    dismissedPromptSessions.delete(oldName);
+    dismissedPromptSessions.add(newName);
+  }
+}
+
+/**
  * Broadcasts the current session labels to all connected WebSocket clients
  * @param {Record<string, string>} [labels]
  */
@@ -427,6 +473,8 @@ export default {
   stopSessionMonitor,
   broadcastSessionsList,
   broadcastSessionLabels,
+  broadcastSessionRenamed,
+  renameSessionTracking,
   checkSessionChanges,
   broadcastQuota,
   handleLifecycleHookEvent,

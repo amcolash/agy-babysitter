@@ -3,8 +3,8 @@ import pty from 'node-pty';
 import path from 'path';
 import fs from 'fs';
 import config, { resolveTilde, AUGMENTED_PATH } from './config.js';
-import { addRecentSession } from './recentSessions.js';
-import { getSessionLabel, removeSessionLabel } from './sessionLabels.js';
+import { addRecentSession, renameRecentSession } from './recentSessions.js';
+import { getSessionLabel, removeSessionLabel, renameSessionLabel } from './sessionLabels.js';
 
 export function sanitizeSessionName(name) {
   if (!name) return 'session';
@@ -201,6 +201,44 @@ export function terminateSession(name) {
 }
 
 /**
+ * Rename a tmux session
+ * @param {string} oldName
+ * @param {string} newName
+ * @returns {{ oldName: string, name: string, renamed: boolean }}
+ */
+export function renameSession(oldName, newName) {
+  const oldSanitized = sanitizeSessionName(oldName);
+  const newSanitized = sanitizeSessionName(newName);
+
+  if (!oldSanitized || !newSanitized) {
+    throw new Error('Session name cannot be empty');
+  }
+
+  if (!hasSession(oldSanitized)) {
+    throw new Error(`Session '${oldSanitized}' not found`);
+  }
+
+  if (oldSanitized === newSanitized) {
+    return { oldName: oldSanitized, name: newSanitized, renamed: false };
+  }
+
+  if (hasSession(newSanitized)) {
+    throw new Error(`Session '${newSanitized}' already exists`);
+  }
+
+  execSync(
+    `tmux rename-session -t ${JSON.stringify('=' + oldSanitized)} ${JSON.stringify(newSanitized)}`,
+    { env: { ...process.env, PATH: AUGMENTED_PATH } }
+  );
+
+  applyTmuxGlobalOptions(newSanitized);
+  renameSessionLabel(oldSanitized, newSanitized);
+  renameRecentSession(oldSanitized, newSanitized);
+
+  return { oldName: oldSanitized, name: newSanitized, renamed: true };
+}
+
+/**
  * Attach to a tmux session via node-pty for Web UI streaming
  * @param {Object} options
  * @param {string} options.sessionName
@@ -266,6 +304,7 @@ export default {
   getUniqueSessionName,
   createSession,
   terminateSession,
+  renameSession,
   attachPtySession,
   sendTmuxKeys,
   sanitizeSessionName
