@@ -94,12 +94,19 @@ export function mergeQuota(current, incoming) {
   if (!current) return incoming;
   if (!incoming) return current;
 
-  const is3pPool = (id) => /claude|anthropic|3p/.test((id || '').toLowerCase());
-  const currentIs3p = is3pPool(current.modelId || current.model);
-  const incomingIs3p = is3pPool(incoming.modelId || incoming.model);
+  const detectPool = (item) => {
+    if (item?.pool) return item.pool;
+    const id = `${item?.modelId || ''} ${item?.model || ''}`.toLowerCase();
+    if (/argon/.test(id)) return 'gemini-argon';
+    if (/claude|anthropic|gpt|oss|3p/.test(id)) return '3p';
+    return 'gemini-flash';
+  };
 
-  // If switching between different model pools (Gemini vs Claude), accept incoming
-  if (currentIs3p !== incomingIs3p) {
+  const currentPool = detectPool(current);
+  const incomingPool = detectPool(incoming);
+
+  // If switching between different model pools (Gemini Flash vs Gemini Argon vs 3P), accept incoming
+  if (currentPool !== incomingPool) {
     return incoming;
   }
 
