@@ -440,7 +440,7 @@ export function sendClearNotification(sessionName) {
 
 export function sendInput(data) {
   if (ws && ws.readyState === WebSocket.OPEN && currentSession) {
-    handleUserInteraction();
+    markTurnStarted();
     ws.send(JSON.stringify({ type: 'input', data, session: currentSession }));
   }
 }

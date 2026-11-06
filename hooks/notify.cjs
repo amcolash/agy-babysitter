@@ -23,12 +23,30 @@ process.stdin.on('end', () => {
   const event = process.argv[2] || 'unknown';
   const workspacePath = payload.workspacePaths && payload.workspacePaths.length > 0 ? payload.workspacePaths[0] : (payload.cwd || null);
 
+  const AUGMENTED_PATH = [
+    process.env.HOME ? path.join(process.env.HOME, '.local/share/fnm') : '',
+    process.env.HOME ? path.join(process.env.HOME, '.cargo/bin') : '',
+    process.env.HOME ? path.join(process.env.HOME, '.local/bin') : '',
+    '/home/linuxbrew/.linuxbrew/bin',
+    '/usr/local/sbin',
+    '/usr/local/bin',
+    '/usr/sbin',
+    '/usr/bin',
+    '/sbin',
+    '/bin',
+    process.env.PATH || ''
+  ].filter(Boolean).join(':');
+
   let sessionName = null;
   // 1. First priority: Query tmux for the specific pane running this hook (immune to stale shell env vars)
   if (process.env.TMUX_PANE) {
     try {
       const { execSync } = require('child_process');
-      const out = execSync(`tmux display-message -p -t "${process.env.TMUX_PANE}" "#S"`, { encoding: 'utf-8', timeout: 500 });
+      const out = execSync(`tmux display-message -p -t "${process.env.TMUX_PANE}" "#S"`, {
+        encoding: 'utf-8',
+        timeout: 1500,
+        env: { ...process.env, PATH: AUGMENTED_PATH }
+      });
       if (out && out.trim()) {
         sessionName = out.trim();
       }
@@ -39,7 +57,11 @@ process.stdin.on('end', () => {
   if (!sessionName && process.env.TMUX) {
     try {
       const { execSync } = require('child_process');
-      const out = execSync('tmux display-message -p "#S"', { encoding: 'utf-8', timeout: 500 });
+      const out = execSync('tmux display-message -p "#S"', {
+        encoding: 'utf-8',
+        timeout: 1500,
+        env: { ...process.env, PATH: AUGMENTED_PATH }
+      });
       if (out && out.trim()) {
         sessionName = out.trim();
       }

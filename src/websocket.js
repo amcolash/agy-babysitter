@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { getQuota } from './quotaManager.js';
 import { attachPtySession, listSessions, hasSession, sendTmuxKeys } from './tmuxManager.js';
-import { markTurnStarted, clearNotification, getAllNotificationStates, broadcastSessionsList } from './sessionMonitor.js';
+import { markTurnStarted, clearNotification, getAllNotificationStates, broadcastSessionsList, handleStreamedPermissionPrompt } from './sessionMonitor.js';
 import { getSessionLabels, setSessionLabel } from './sessionLabels.js';
 
 const SERVER_BOOT_TIME = Date.now();
@@ -106,9 +106,26 @@ export function setupWebSocketServer(server) {
         currentAttachedSession = sessionName;
         ws.sessionName = sessionName;
 
+        let ptyStreamBuffer = '';
+
         proc.onData((data) => {
           if (!isClosed && ws.readyState === WebSocket.OPEN) {
             ws.send(data);
+          }
+
+          if (currentAttachedSession) {
+            const rawText = typeof data === 'string' ? data : data.toString('utf-8');
+            const cleanText = rawText
+              .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+              .replace(/\x1b\].*?(\x07|\x1b\\)/g, '')
+              .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ');
+
+            ptyStreamBuffer = (ptyStreamBuffer + cleanText).slice(-4096);
+
+            // Hard stop: immediately broadcast 'input' notification if Antigravity is requesting permission
+            if (/Requesting permission (?:for|to)/i.test(ptyStreamBuffer)) {
+              handleStreamedPermissionPrompt(currentAttachedSession);
+            }
           }
         });
 
@@ -205,8 +222,11 @@ export function setupWebSocketServer(server) {
             }
             return;
           } else if (payload.type === 'input' && payload.data !== undefined) {
+            const activeSes = payload.session || currentAttachedSession || ws.sessionName;
+            if (activeSes) {
+              markTurnStarted(activeSes);
+            }
             if (payload.data === '\x1b') {
-              const activeSes = payload.session || currentAttachedSession || ws.sessionName;
               if (activeSes && sendTmuxKeys(activeSes, 'Escape')) {
                 return;
               }

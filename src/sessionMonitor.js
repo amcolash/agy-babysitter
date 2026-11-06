@@ -30,19 +30,27 @@ function getSessionsSignature(sessions) {
 export function isPaneAwaitingConfirmation(paneContent) {
   if (!paneContent || typeof paneContent !== 'string') return false;
 
-  // Inspect the bottom 15 lines of the visible pane where active prompts reside
-  const lines = paneContent.split('\n').slice(-15).join('\n');
+  // Inspect the bottom 50 lines of the visible pane where active prompts reside
+  const lines = paneContent.split('\n').slice(-50).join('\n');
 
-  // 1. Antigravity permission prompt headers
-  const hasPermissionHeader = /Requesting permission (?:for|to)/i.test(lines);
+  // Hard stop 1: Antigravity permission prompt header.
+  // When "Requesting permission for" or "Requesting permission to" is present in the active area,
+  // the session is definitively awaiting user approval.
+  if (/Requesting permission (?:for|to)/i.test(lines)) {
+    return true;
+  }
 
   // 2. Specific permission questions
-  const hasPermissionQuestion = /(?:Run this command\?|Allow access to this (?:file|URL)\?|Allow calling this tool\?|Do you want to (?:run|proceed|continue)\?)/i.test(lines);
+  const hasPermissionQuestion = /(?:Run this command\?|Allow access to this (?:file|URL)\?|Allow calling this tool\?|Do you want to (?:run|proceed|continue)\?|Allow (?:reading|editing|writing|modifying) (?:file|this)?)/i.test(lines);
 
-  // 3. Choice options: must have an affirmative choice AND a cancellation choice
-  const hasYesChoice = /(?:(?:>|\s)\s*1\.\s*Yes|\bYes,\s*(?:run|allow|proceed))\b/i.test(lines);
-  const hasNoChoice = /(?:(?:>|\s)\s*2\.\s*No|\bNo,\s*cancel)\b/i.test(lines);
-  const hasConfirmationChoices = hasYesChoice && hasNoChoice;
+  // 3. Choice options
+  const hasAffirmativeChoice = /(?:(?:>|\s)\s*1\.\s*(?:Yes|Allow|Run)|\b(?:Yes|Allow|Run),\s*(?:run|allow|proceed))\b/i.test(lines);
+  const hasCancelChoice = /(?:(?:>|\s)\s*[23]\.\s*(?:No|Cancel|Reject|Deny)|\bNo,\s*cancel)\b/i.test(lines);
+
+  // Condition A: Specific permission question paired with a recognizable option
+  if (hasPermissionQuestion && (hasAffirmativeChoice || hasCancelChoice)) {
+    return true;
+  }
 
   // 4. Keyboard navigation hints commonly shown in prompt modals
   const hasNavigationHint = /(?:↑\/↓|Navigate\s*·)/i.test(lines);
@@ -50,20 +58,13 @@ export function isPaneAwaitingConfirmation(paneContent) {
   // 5. Numbered menu choices (e.g. "> 1. " followed by " 2. ")
   const hasMenuChoices = /(?:>|\s)\s*1\.\s+.*\n.*(?:>|\s)\s*2\.\s+/i.test(lines);
 
-  // 6. Generic interactive CLI prompts (e.g. [y/n] or (Y/n) at end of prompt)
-  const hasGenericPrompt = /(?:\[y\/n\]|\([yY]\/[nN]\))\s*$/im.test(lines);
-
-  // Condition A: Standard Antigravity tool permission prompt (must have prompt header or question AND both confirmation choices)
-  if ((hasPermissionHeader || hasPermissionQuestion) && hasConfirmationChoices) {
-    return true;
-  }
-
   // Condition B: Interactive choice menu (e.g. ask_question prompt with choices and navigation)
   if (hasNavigationHint && hasMenuChoices) {
     return true;
   }
 
-  // Condition C: Generic CLI prompt waiting at prompt line
+  // 6. Generic interactive CLI prompts (e.g. [y/n] or (Y/n) at end of prompt)
+  const hasGenericPrompt = /(?:\[y\/n\]|\([yY]\/[nN]\))\s*$/im.test(lines);
   if (hasGenericPrompt) {
     return true;
   }
@@ -81,7 +82,7 @@ export function checkSessionAwaitingInput(sessionName) {
     if (!sessionName) return resolve(false);
     exec(
       `tmux capture-pane -t "=${sessionName}:" -p`,
-      { encoding: 'utf-8', timeout: 500, env: { ...process.env, PATH: AUGMENTED_PATH } },
+      { encoding: 'utf-8', timeout: 2500, env: { ...process.env, PATH: AUGMENTED_PATH } },
       (err, stdout) => {
         if (err || !stdout) {
           return resolve(false);
@@ -194,6 +195,21 @@ export function broadcastSessionLabels(labels = null) {
 }
 
 /**
+ * Hard-stop handler when "Requesting permission for" is newly streamed from the terminal
+ * @param {string} sessionName
+ */
+export function handleStreamedPermissionPrompt(sessionName) {
+  if (!sessionName) return;
+  pendingInputMisses.delete(sessionName);
+  dismissedPromptSessions.delete(sessionName);
+  if (sessionStates.get(sessionName) !== 'input') {
+    sessionStates.set(sessionName, 'input');
+    broadcastSessionNotification(sessionName, 'input');
+    console.log(`[StreamMonitor] Hard stop: "Requesting permission for" streamed in session '${sessionName}' -> broadcasted 'input' notification`);
+  }
+}
+
+/**
  * Checks if tmux session list changed and inspects active sessions for permission prompts
  */
 export async function checkSessionChanges() {
@@ -204,8 +220,8 @@ export async function checkSessionChanges() {
       broadcastSessionsList(currentSessions);
     }
 
-    // Inspect active session panes for permission prompts / interactive menus
-    for (const session of currentSessions) {
+    // Inspect active session panes concurrently for permission prompts / interactive menus
+    await Promise.all(currentSessions.map(async (session) => {
       const awaiting = await checkSessionAwaitingInput(session.name);
       const currentState = sessionStates.get(session.name);
 
@@ -213,7 +229,7 @@ export async function checkSessionChanges() {
         pendingInputMisses.delete(session.name);
         // If user already dismissed notifications for this prompt, do not re-notify
         if (dismissedPromptSessions.has(session.name)) {
-          continue;
+          return;
         }
         if (currentState !== 'input') {
           sessionStates.set(session.name, 'input');
@@ -224,10 +240,10 @@ export async function checkSessionChanges() {
         dismissedPromptSessions.delete(session.name);
 
         if (currentState === 'input') {
-          // Confirmation prompt disappeared: after 2 consecutive checks, clear input state
+          // Confirmation prompt disappeared: after 4 consecutive checks, clear input state
           const misses = (pendingInputMisses.get(session.name) || 0) + 1;
           pendingInputMisses.set(session.name, misses);
-          if (misses >= 2) {
+          if (misses >= 4) {
             pendingInputMisses.delete(session.name);
             sessionStates.set(session.name, null);
             broadcastSessionNotification(session.name, null);
@@ -236,7 +252,7 @@ export async function checkSessionChanges() {
           pendingInputMisses.delete(session.name);
         }
       }
-    }
+    }));
   } catch (e) {}
 }
 
@@ -294,17 +310,15 @@ export function handleLifecycleHookEvent({ event, session, workspacePath, conver
   let targetSession = null;
   const normalizedWp = workspacePath ? path.resolve(workspacePath) : null;
 
-  // 1. Exact match: passed session name matches an active tmux session AND its cwd matches workspacePath
+  // 1. Direct match: passed session name matches an active tmux session directly
   if (session) {
     const sessionMatch = currentSessions.find((s) => s.name === session);
     if (sessionMatch) {
-      if (!normalizedWp || (sessionMatch.cwd && path.resolve(sessionMatch.cwd) === normalizedWp)) {
-        targetSession = sessionMatch.name;
-      }
+      targetSession = sessionMatch.name;
     }
   }
 
-  // 2. Match by workspacePath if session cwd was mismatched or session not found
+  // 2. Match by workspacePath if session was mismatched or not found
   if (!targetSession && normalizedWp) {
     const cwdMatches = currentSessions.filter((s) => s.cwd && path.resolve(s.cwd) === normalizedWp);
     if (cwdMatches.length === 1) {
@@ -476,6 +490,7 @@ export default {
   broadcastSessionRenamed,
   renameSessionTracking,
   checkSessionChanges,
+  handleStreamedPermissionPrompt,
   broadcastQuota,
   handleLifecycleHookEvent,
   scheduleToolPermissionChecks,
