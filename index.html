@@ -655,7 +655,8 @@
               <div id="recent-sessions-list" class="flex flex-wrap gap-2 pt-0.5"></div>
             </div>
 
-            <!-- Session Name -->
+            <!-- Session Name (commented out: auto-generated from directory name) -->
+            <!--
             <div class="form-group flex flex-col gap-1.5">
               <label for="new-session-name" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Session Name</label>
               <input
@@ -668,6 +669,7 @@
               />
               <small class="text-[11px] text-[#5B6268]">Alphanumeric, underscores, hyphens only</small>
             </div>
+            -->
 
             <!-- Starting Directory / Folder Picker -->
             <div class="form-group flex flex-col gap-1.5">
@@ -691,18 +693,19 @@
                   <input
                     type="text"
                     id="picker-search-input"
-                    placeholder="Search folders in selected root..."
+                    placeholder="Search projects..."
                     class="w-full bg-[#1b2229] border border-[#3f444a] focus:border-[#51afef] focus:ring-1 focus:ring-[#51afef] text-[#DFDFDF] rounded px-2.5 py-1.5 text-xs outline-none transition"
                   />
                 </div>
 
-                <div id="picker-folder-list" class="picker-folder-list max-h-44 overflow-y-auto flex flex-col">
+                <div id="picker-folder-list" class="picker-folder-list max-h-60 overflow-y-auto flex flex-col">
                   <div class="picker-loading text-xs text-[#5B6268] p-3 text-center">Loading allowed directories...</div>
                 </div>
               </div>
             </div>
 
-            <!-- Initial Command -->
+            <!-- Initial Command (commented out: agy is always used) -->
+            <!--
             <div class="form-group flex flex-col gap-1.5">
               <label for="new-session-command" class="text-xs font-semibold text-[#bbc2cf] uppercase tracking-wider">Initial Command</label>
               <input
@@ -714,6 +717,7 @@
               />
               <small class="text-[11px] text-[#5B6268]">Command to execute in the new session (default: agy)</small>
             </div>
+            -->
 
             <!-- Modal Actions -->
             <div class="modal-actions flex items-center justify-end gap-2.5 pt-3 border-t border-[#3f444a]">
