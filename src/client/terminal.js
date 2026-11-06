@@ -1193,14 +1193,65 @@ export function getRecentTerminalLines(numLines = 25) {
 }
 
 /**
- * Checks if a string is a known CLI prompt placeholder, divider line, or tip
+ * Detects whether a string is a task execution line, background task status,
+ * spinner, thought summary, interactive confirmation choice, or statusline
  * @param {string} text
  * @returns {boolean}
  */
+export function isTaskStatusText(text) {
+  if (!text) return false;
+  const t = text.trim();
+  if (!t) return false;
+
+  // Running background task lines, e.g. "● [15:27:54] godot ... running" or "[15:27:54] ... running"
+  if (/^●\s+(\[\d{1,2}:\d{2}(:\d{2})?\]\s+)?.*?\b(running|finished|stopped|completed|killed|failed)\b/i.test(t)) {
+    return true;
+  }
+  if (/^\[\d{1,2}:\d{2}(:\d{2})?\]\s+.*?\b(running|finished|stopped|completed|killed|failed)\b/i.test(t)) {
+    return true;
+  }
+
+  // Tool execution status lines starting with bullet, e.g. "● Bash(...)", "● Read(...)", "● Edit(...)", "● Working..."
+  if (/^●\s+/i.test(t)) {
+    return true;
+  }
+
+  // Live execution spinners or progress indicators
+  if (/^[⠋⠙⠹⠸⣰⣠⣄⣆⣇⣈⣐⣯⣟⣷]\s+/i.test(t)) {
+    return true;
+  }
+
+  // agy thought summaries: "▸ Thought for 17s..."
+  if (/^▸\s*(?:thought for|thinking)/i.test(t)) {
+    return true;
+  }
+
+  // Interactive permission/menu options, e.g. "> 1. Yes, run command", "2. No, cancel"
+  if (/^(?:[>›❯▶»]\s*)?\d+\.\s+(?:yes|no|allow|cancel|run|proceed|deny|reject)\b/i.test(t)) {
+    return true;
+  }
+
+  // Navigation hint lines
+  if (/↑\/↓\s*navigate/i.test(t)) {
+    return true;
+  }
+
+  // Statusline info: "Context: 16% │ Daily Left..."
+  if (/Context:\s*\d+%.*Daily Left/i.test(t) || /^Quota\s+\d+[hd]/i.test(t)) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isPlaceholderOrTip(text) {
   if (!text) return true;
   const t = text.trim();
   if (!t) return true;
+
+  if (isTaskStatusText(t)) {
+    return true;
+  }
 
   // Exact symbol / divider / whitespace only
   if (/^([>›❯●▶»?$\#:]|>{1,3}|\.\.\.|[─━\-_=]+)$/.test(t)) {
@@ -1251,8 +1302,9 @@ export function stripPromptPrefix(rawLine) {
     return isPlaceholderOrTip(stripped) ? '' : stripped;
   }
 
-  // Symbol prompts like "> input", "› input", "❯ input", "● input", "$ input", "# input"
-  const symbolPromptRegex = /^([>›❯●▶»?$\#]|>{1,3}|\.\.\.)\s+(.*)$/;
+  // Symbol prompts like "> input", "› input", "❯ input", "$ input", "# input"
+  // Note: '●' (bullet) is intentionally excluded as it denotes running tasks/tools, not user input prompts
+  const symbolPromptRegex = /^([>›❯▶»?$\#]|>{1,3}|\.\.\.)\s+(.*)$/;
   const symbolMatch = text.match(symbolPromptRegex);
   if (symbolMatch && typeof symbolMatch[2] === 'string') {
     const stripped = symbolMatch[2].trim();
@@ -1298,36 +1350,66 @@ export function getCurrentTerminalInput() {
       return /^[─━\-_=]{5,}/.test(str);
     };
 
-    // 2. Pattern A: Check for agy prompt enclosed between top and bottom divider lines (───)
-    let bottomDividerY = -1;
-    let topDividerY = -1;
-
-    // Scan backwards from the end of the buffer to find the active prompt box
+    // 2. Pattern A: Check for agy prompt enclosed between horizontal divider lines (───)
+    // In agy, there may be multiple divider-enclosed boxes:
+    // - Prompt box (top divider to middle divider): starts with prompt indicator >
+    // - Running background task box (middle divider to bottom divider): contains "● [HH:MM:SS] ... running"
     const searchStartY = Math.min(totalLines - 1, currentAbsoluteY + 6);
-    const searchEndY = Math.max(0, currentAbsoluteY - 14);
+    const searchEndY = Math.max(0, currentAbsoluteY - 20);
 
+    const dividerYs = [];
     for (let y = searchStartY; y >= searchEndY; y--) {
       const line = buffer.getLine(y);
       if (isDividerLine(line)) {
-        if (bottomDividerY === -1) {
-          bottomDividerY = y;
-        } else {
-          topDividerY = y;
-          break;
-        }
+        dividerYs.push(y);
       }
     }
 
-    // If an agy divider box is detected
-    if (topDividerY !== -1 && bottomDividerY !== -1 && bottomDividerY > topDividerY && (bottomDividerY - topDividerY) <= 10) {
+    dividerYs.sort((a, b) => a - b);
+
+    const candidateBoxes = [];
+    for (let i = 0; i < dividerYs.length - 1; i++) {
+      const topY = dividerYs[i];
+      const botY = dividerYs[i + 1];
+      const height = botY - topY;
+      if (height > 1 && height <= 12) {
+        const rawLines = [];
+        for (let y = topY + 1; y < botY; y++) {
+          const line = buffer.getLine(y);
+          if (line) {
+            rawLines.push(line.translateToString(true).trim());
+          }
+        }
+        candidateBoxes.push({ topY, botY, rawLines });
+      }
+    }
+
+    // Identify the prompt box vs running task boxes
+    let promptBox = null;
+    for (const box of candidateBoxes) {
+      const nonEmptyLines = box.rawLines.filter((l) => l.length > 0);
+      if (nonEmptyLines.length === 0) {
+        promptBox = box;
+        break;
+      }
+      const hasTaskStatus = nonEmptyLines.some((l) => isTaskStatusText(l));
+      if (hasTaskStatus) {
+        // Skip background running task box
+        continue;
+      }
+      const firstLine = nonEmptyLines[0];
+      if (/^[>›❯▶»]/.test(firstLine)) {
+        promptBox = box;
+        break;
+      }
+    }
+
+    if (promptBox) {
       const promptLines = [];
-      for (let y = topDividerY + 1; y < bottomDividerY; y++) {
-        const line = buffer.getLine(y);
-        if (!line) continue;
-        const raw = line.translateToString(true).trim();
-        if (!raw) continue;
+      for (const raw of promptBox.rawLines) {
+        if (!raw || isTaskStatusText(raw)) continue;
         // Strip leading prompt indicator > or › or ❯
-        const stripped = raw.replace(/^[>›❯●▶»]\s*/, '');
+        const stripped = raw.replace(/^[>›❯▶»]\s*/, '');
         if (stripped) {
           promptLines.push(stripped);
         }
@@ -1337,7 +1419,13 @@ export function getCurrentTerminalInput() {
       if (combined && !isPlaceholderOrTip(combined)) {
         return combined;
       }
-      // agy box was found on screen, so user is in agy: if box is empty or tip, return ''
+      // An agy prompt box was found, but it is empty or only has placeholder/tip
+      return '';
+    }
+
+    // If divider boxes exist on screen (we are in agy) but no valid prompt was found,
+    // do not fall through to random terminal lines (such as task outputs)
+    if (candidateBoxes.length > 0) {
       return '';
     }
 
@@ -1362,6 +1450,10 @@ export function getCurrentTerminalInput() {
       if (line) {
         fullText += line.translateToString(y === endY);
       }
+    }
+
+    if (isTaskStatusText(fullText)) {
+      return '';
     }
 
     const stripped = stripPromptPrefix(fullText);
@@ -1393,26 +1485,21 @@ export function getLinesAbovePrompt(numLines = 15) {
       return /^[─━\-_=]{5,}/.test(str);
     };
 
-    let topDividerY = -1;
-    let bottomDividerY = -1;
     const searchStartY = Math.min(totalLines - 1, currentAbsoluteY + 6);
-    const searchEndY = Math.max(0, currentAbsoluteY - 14);
+    const searchEndY = Math.max(0, currentAbsoluteY - 20);
 
+    const dividerYs = [];
     for (let y = searchStartY; y >= searchEndY; y--) {
       const line = buffer.getLine(y);
       if (isDividerLine(line)) {
-        if (bottomDividerY === -1) {
-          bottomDividerY = y;
-        } else {
-          topDividerY = y;
-          break;
-        }
+        dividerYs.push(y);
       }
     }
 
     let cutoffY = currentAbsoluteY;
-    if (topDividerY !== -1) {
-      cutoffY = topDividerY;
+    if (dividerYs.length > 0) {
+      dividerYs.sort((a, b) => a - b);
+      cutoffY = dividerYs[0];
     }
 
     const lines = [];
