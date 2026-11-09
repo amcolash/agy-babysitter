@@ -31,43 +31,49 @@ export function unlockAudio() {
   }
 }
 
-let lastSoundPlayedAt = 0;
-const SOUND_THROTTLE_MS = 5000;
+const NOTIFICATION_THROTTLE_MS = 2000;
+const lastAlertTimeBySession = new Map();
 
 /**
- * Play a synthesized warm, gentle acoustic chime (throttled to at most once every 5 seconds)
+ * Play a synthesized warm, gentle acoustic chime and subtle haptic vibration for a tab/session
+ * (throttled to at most once every 2 seconds per tab)
+ * @param {string} [sessionName]
  */
-export function playNotificationSound() {
+export function playNotificationSound(sessionName = null) {
   try {
-    // 1. Mobile haptic vibration if enabled
+    const targetSession = sessionName || getCurrentSession() || '__default__';
+    const now = Date.now();
+
+    // 1. Check in-memory per-tab throttle (2 seconds)
+    const lastSessionAlert = lastAlertTimeBySession.get(targetSession) || 0;
+    if (now - lastSessionAlert < NOTIFICATION_THROTTLE_MS) {
+      return;
+    }
+
+    // 2. Check cross-browser-tab throttle via localStorage (2 seconds per tab)
+    const storageKey = `agy_last_ding_${targetSession}`;
+    try {
+      const stored = parseInt(localStorage.getItem(storageKey) || '0', 10);
+      if (now - stored < NOTIFICATION_THROTTLE_MS) {
+        lastAlertTimeBySession.set(targetSession, stored);
+        return;
+      }
+      localStorage.setItem(storageKey, String(now));
+    } catch (e) {}
+
+    lastAlertTimeBySession.set(targetSession, now);
+
+    // 3. Mobile haptic vibration if enabled (single subtle tap, throttled)
     if (getSetting('vibrationEnabled') !== false) {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([20]);
       }
     }
 
-    // 2. Audio chime if enabled
+    // 4. Audio chime if enabled (throttled)
     if (!getSetting('soundEnabled')) {
       return;
     }
-    const now = Date.now();
-
-    // Check in-memory throttle
-    if (now - lastSoundPlayedAt < SOUND_THROTTLE_MS) {
-      return;
-    }
-
-    // Check cross-browser-tab throttle via localStorage
-    try {
-      const stored = parseInt(localStorage.getItem('agy_last_ding_time') || '0', 10);
-      if (now - stored < SOUND_THROTTLE_MS) {
-        lastSoundPlayedAt = stored;
-        return;
-      }
-      localStorage.setItem('agy_last_ding_time', String(now));
-    } catch (e) {}
-
-    lastSoundPlayedAt = now;
 
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -127,11 +133,6 @@ export function playNotificationSound() {
       harmonicOsc.start(startTime);
       harmonicOsc.stop(startTime + note.len * 0.4);
     });
-
-    // Mobile haptic vibration if supported (short subtle single tap)
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([20]);
-    }
   } catch (e) {
     // Audio playback error (e.g. browser policy)
   }
@@ -172,6 +173,11 @@ export function getSessionNotification(sessionName) {
 export function pruneSessionNotifications(validSessionNames) {
   if (!Array.isArray(validSessionNames)) return;
   const valid = new Set(validSessionNames);
+  for (const name of lastAlertTimeBySession.keys()) {
+    if (!valid.has(name) && name !== '__default__') {
+      lastAlertTimeBySession.delete(name);
+    }
+  }
   let changed = false;
   for (const name of sessionStates.keys()) {
     if (!valid.has(name)) {
@@ -227,6 +233,10 @@ export function clearSessionNotification(sessionName) {
 
 export function renameSessionNotification(oldName, newName) {
   if (!oldName || !newName || oldName === newName) return;
+  if (lastAlertTimeBySession.has(oldName)) {
+    lastAlertTimeBySession.set(newName, lastAlertTimeBySession.get(oldName));
+    lastAlertTimeBySession.delete(oldName);
+  }
   if (sessionStates.has(oldName)) {
     sessionStates.set(newName, sessionStates.get(oldName));
     sessionStates.delete(oldName);
@@ -246,7 +256,7 @@ export function handleServerSessionNotification(sessionName, state) {
     onNotificationChangeCallback(sessionName, state);
   }
   if (state && state !== prevState) {
-    playNotificationSound();
+    playNotificationSound(sessionName);
   }
   if (!state && getCurrentSession() === sessionName) {
     cancelFocusDismissTimer();
@@ -433,6 +443,17 @@ export function onTerminalDataReceived(data) {
     .replace(/\x1b\].*?(\x07|\x1b\\)/g, '')
     .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ');
 
+  // If incoming stream contains braille spinner characters (e.g. ⣻ ⠋ ⠙ etc.),
+  // the agent is actively thinking: clear the buffer and clear any stale 'input' notification
+  if (/[\u2800-\u28FF]/.test(data) || /[\u2800-\u28FF]/.test(clean)) {
+    clientStreamBuffer = '';
+    const s = sessionStates.get(current);
+    if (s && s.notified === 'input') {
+      clearSessionNotification(current);
+    }
+    return;
+  }
+
   clientStreamBuffer = (clientStreamBuffer + clean).slice(-4096);
 
   // Hard stop: show notification if "Requesting permission for" or "Requesting permission to" is newly streamed
@@ -445,9 +466,10 @@ export function onTerminalDataReceived(data) {
       if (onNotificationChangeCallback) {
         onNotificationChangeCallback(current, 'input');
       }
-      playNotificationSound();
+      playNotificationSound(current);
       scheduleFocusDismiss(current, 3000);
     }
+    clientStreamBuffer = '';
   }
 }
 

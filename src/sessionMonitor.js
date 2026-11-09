@@ -22,6 +22,17 @@ function getSessionsSignature(sessions) {
 }
 
 /**
+ * Detects if the terminal pane has an active thinking/spinner indicator (braille characters like ⣻, ⠋, ⠙)
+ * @param {string} paneContent
+ * @returns {boolean}
+ */
+export function isPaneThinking(paneContent) {
+  if (!paneContent || typeof paneContent !== 'string') return false;
+  const lines = paneContent.split('\n').slice(-50).join('\n');
+  return /[\u2800-\u28FF]/.test(lines);
+}
+
+/**
  * Pattern that detects Antigravity confirmation prompts or interactive questions
  * in the active prompt area of the visible terminal pane.
  * @param {string} paneContent
@@ -32,6 +43,12 @@ export function isPaneAwaitingConfirmation(paneContent) {
 
   // Inspect the bottom 50 lines of the visible pane where active prompts reside
   const lines = paneContent.split('\n').slice(-50).join('\n');
+
+  // If the terminal pane contains braille spinner characters (e.g. ⣻ ⠋ ⠙ etc.),
+  // the agent is in an active "thinking" state and no notification is needed.
+  if (/[\u2800-\u28FF]/.test(lines)) {
+    return false;
+  }
 
   // Hard stop 1: Antigravity permission prompt header.
   // When "Requesting permission for" or "Requesting permission to" is present in the active area,
@@ -73,24 +90,36 @@ export function isPaneAwaitingConfirmation(paneContent) {
 }
 
 /**
- * Checks if a session's visible tmux pane is waiting for user confirmation or input
+ * Checks if a session's visible tmux pane is thinking or waiting for user confirmation
  * @param {string} sessionName
- * @returns {Promise<boolean>}
+ * @returns {Promise<{ awaiting: boolean, thinking: boolean }>}
  */
-export function checkSessionAwaitingInput(sessionName) {
+export function inspectSessionPane(sessionName) {
   return new Promise((resolve) => {
-    if (!sessionName) return resolve(false);
+    if (!sessionName) return resolve({ awaiting: false, thinking: false });
     exec(
       `tmux capture-pane -t "=${sessionName}:" -p`,
       { encoding: 'utf-8', timeout: 2500, env: { ...process.env, PATH: AUGMENTED_PATH } },
       (err, stdout) => {
         if (err || !stdout) {
-          return resolve(false);
+          return resolve({ awaiting: false, thinking: false });
         }
-        resolve(isPaneAwaitingConfirmation(stdout));
+        const thinking = isPaneThinking(stdout);
+        const awaiting = !thinking && isPaneAwaitingConfirmation(stdout);
+        resolve({ awaiting, thinking });
       }
     );
   });
+}
+
+/**
+ * Checks if a session's visible tmux pane is waiting for user confirmation or input
+ * @param {string} sessionName
+ * @returns {Promise<boolean>}
+ */
+export async function checkSessionAwaitingInput(sessionName) {
+  const { awaiting } = await inspectSessionPane(sessionName);
+  return awaiting;
 }
 
 /**
@@ -222,8 +251,19 @@ export async function checkSessionChanges() {
 
     // Inspect active session panes concurrently for permission prompts / interactive menus
     await Promise.all(currentSessions.map(async (session) => {
-      const awaiting = await checkSessionAwaitingInput(session.name);
+      const { awaiting, thinking } = await inspectSessionPane(session.name);
       const currentState = sessionStates.get(session.name);
+
+      if (thinking) {
+        // Active thinking state detected via braille characters (e.g. ⣻):
+        // Never notify while thinking, and immediately clear any stale 'input' notification
+        pendingInputMisses.delete(session.name);
+        if (currentState === 'input') {
+          sessionStates.set(session.name, null);
+          broadcastSessionNotification(session.name, null);
+        }
+        return;
+      }
 
       if (awaiting) {
         pendingInputMisses.delete(session.name);
@@ -494,7 +534,9 @@ export default {
   broadcastQuota,
   handleLifecycleHookEvent,
   scheduleToolPermissionChecks,
+  inspectSessionPane,
   checkSessionAwaitingInput,
+  isPaneThinking,
   isPaneAwaitingConfirmation,
   markTurnStarted,
   clearNotification,

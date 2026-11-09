@@ -120,11 +120,18 @@ export function setupWebSocketServer(server) {
               .replace(/\x1b\].*?(\x07|\x1b\\)/g, '')
               .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ');
 
-            ptyStreamBuffer = (ptyStreamBuffer + cleanText).slice(-4096);
+            // If incoming stream contains braille spinner characters (e.g. ⣻),
+            // the agent is actively thinking: clear the buffer so old prompts cannot re-trigger
+            if (/[\u2800-\u28FF]/.test(rawText) || /[\u2800-\u28FF]/.test(cleanText)) {
+              ptyStreamBuffer = '';
+            } else {
+              ptyStreamBuffer = (ptyStreamBuffer + cleanText).slice(-4096);
 
-            // Hard stop: immediately broadcast 'input' notification if Antigravity is requesting permission
-            if (/Requesting permission (?:for|to)/i.test(ptyStreamBuffer)) {
-              handleStreamedPermissionPrompt(currentAttachedSession);
+              // Hard stop: immediately broadcast 'input' notification if Antigravity is requesting permission
+              if (/Requesting permission (?:for|to)/i.test(ptyStreamBuffer)) {
+                handleStreamedPermissionPrompt(currentAttachedSession);
+                ptyStreamBuffer = '';
+              }
             }
           }
         });
