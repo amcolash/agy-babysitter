@@ -1125,13 +1125,37 @@ export async function copySelectionToClipboard(showFeedback = true) {
   return false;
 }
 
+export function pasteTextToTerminal(text, onInputCallback) {
+  if (!text) return false;
+  if (!isTerminalInputAllowed()) return false;
+
+  const cb = onInputCallback || ((data) => {
+    // If not provided, call term.paste which triggers term.onData
+    try {
+      term.paste(data);
+    } catch (e) {}
+  });
+
+  const normalized = text.replace(/\r?\n/g, '\r');
+  const isBracketed = Boolean(
+    term.modes?.bracketedPasteMode ||
+    term._core?.coreService?.decPrivateModes?.bracketedPasteMode
+  );
+
+  if (isBracketed) {
+    cb(`\x1b[200~${normalized}\x1b[201~`);
+  } else {
+    cb(normalized);
+  }
+  return true;
+}
+
 export async function pasteClipboardToTerminal(onInputCallback) {
   try {
     if (navigator.clipboard?.readText) {
       const text = await navigator.clipboard.readText();
-      if (text && onInputCallback) {
-        onInputCallback(text);
-        return true;
+      if (text) {
+        return pasteTextToTerminal(text, onInputCallback);
       }
     }
   } catch (err) {

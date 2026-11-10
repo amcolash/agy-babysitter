@@ -1,5 +1,5 @@
 import { sendInput } from './socket.js';
-import { getCurrentTerminalInput } from './terminal.js';
+import { getCurrentTerminalInput, pasteTextToTerminal } from './terminal.js';
 
 const inputPopupOverlay = document.getElementById('input-popup-overlay');
 const textarea = document.getElementById('terminal-input-textarea');
@@ -89,7 +89,7 @@ export function sendCurrentInput() {
   }
 
   if (text.length > 0) {
-    sendInput(text + (sendEnter ? '\r' : ''));
+    pasteTextToTerminal(text + (sendEnter ? '\r' : ''), sendInput);
   } else if (sendEnter) {
     // Empty text with Enter enabled -> send Enter keypress
     sendInput('\r');
