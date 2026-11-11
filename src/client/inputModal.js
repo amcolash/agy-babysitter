@@ -3,8 +3,6 @@ import { getCurrentTerminalInput, pasteTextToTerminal } from './terminal.js';
 
 const inputPopupOverlay = document.getElementById('input-popup-overlay');
 const textarea = document.getElementById('terminal-input-textarea');
-const sendEnterCheckbox = document.getElementById('input-send-enter-checkbox');
-const replaceLineCheckbox = document.getElementById('input-replace-line-checkbox');
 const btnSend = document.getElementById('btn-send-input-popup');
 const btnCancel = document.getElementById('btn-cancel-input-popup');
 const btnClose = document.getElementById('btn-close-input-popup');
@@ -42,22 +40,16 @@ export function openInputModal(initialText = '') {
   openedAt = Date.now();
 
   let textToSet = initialText;
-  let hasGrabbedFromTerminal = false;
 
   // Always automatically grab uncommitted text from terminal prompt or selection if not provided
   if (!textToSet) {
     const grabbed = getCurrentTerminalInput();
     if (grabbed) {
       textToSet = grabbed;
-      hasGrabbedFromTerminal = true;
     }
   }
 
   textarea.value = textToSet || '';
-  if (replaceLineCheckbox) {
-    replaceLineCheckbox.checked = hasGrabbedFromTerminal;
-  }
-
   inputPopupOverlay.classList.remove('hidden');
 
   // Focus textarea for mobile software keyboard and place cursor at the end
@@ -79,24 +71,29 @@ export function closeInputModal() {
 
 export function sendCurrentInput() {
   if (!isInputEnabled || !textarea) return;
-  const text = textarea.value;
-  const sendEnter = sendEnterCheckbox ? sendEnterCheckbox.checked : true;
-  const replaceLine = replaceLineCheckbox ? replaceLineCheckbox.checked : false;
+  const rawText = textarea.value;
 
-  if (replaceLine) {
-    // Send Ctrl+U (\x15) to clear the existing uncommitted prompt line on terminal
-    sendInput('\x15');
-  }
+  // Always clear the current prompt line first (Ctrl+E then Ctrl+U: move to end and kill backward)
+  // so any existing uncommitted text at the prompt is replaced cleanly by the editor's content
+  const clearPrompt = '\x05\x15';
+
+  // Strip trailing newlines (since Enter will be sent explicitly to execute)
+  const text = rawText.replace(/[\r\n]+$/, '');
 
   if (text.length > 0) {
-    pasteTextToTerminal(text + (sendEnter ? '\r' : ''), sendInput);
-  } else if (sendEnter) {
-    // Empty text with Enter enabled -> send Enter keypress
-    sendInput('\r');
-  }
-
-  if (replaceLineCheckbox) {
-    replaceLineCheckbox.checked = false;
+    if (text.includes('\n')) {
+      // Multi-line text: clear prompt first, then paste safely with bracketed paste if supported
+      sendInput(clearPrompt);
+      pasteTextToTerminal(text, sendInput);
+      // Send Enter outside bracketed paste so the shell executes the command
+      setTimeout(() => sendInput('\r'), 30);
+    } else {
+      // Single-line text: clear prompt, write text, and execute Enter atomically
+      sendInput(clearPrompt + text + '\r');
+    }
+  } else {
+    // Empty text: clear prompt and execute Enter
+    sendInput(clearPrompt + '\r');
   }
 
   textarea.value = '';
@@ -130,37 +127,51 @@ export function initInputModal() {
       e.preventDefault();
       if (textarea) {
         textarea.value = '';
-        if (replaceLineCheckbox) {
-          replaceLineCheckbox.checked = false;
-        }
         textarea.focus();
       }
     });
   }
 
   if (textarea) {
+    let shiftHeld = false;
+
     textarea.addEventListener('keydown', (e) => {
-      // Enter without Shift -> Send
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      shiftHeld = Boolean(e.shiftKey);
+      const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13;
+
+      // Enter without Shift -> Send immediately
+      if (isEnter && !e.shiftKey) {
         e.preventDefault();
         sendCurrentInput();
         return;
       }
 
       // Escape -> Close
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' || e.keyCode === 27) {
         e.preventDefault();
         closeInputModal();
         return;
       }
 
       // Tab -> insert Tab
-      if (e.key === 'Tab') {
+      if (e.key === 'Tab' || e.keyCode === 9) {
         e.preventDefault();
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         textarea.value = textarea.value.substring(0, start) + '\t' + textarea.value.substring(end);
         textarea.selectionStart = textarea.selectionEnd = start + 1;
+      }
+    });
+
+    textarea.addEventListener('keyup', (e) => {
+      shiftHeld = Boolean(e.shiftKey);
+    });
+
+    // Mobile virtual keyboards: handle soft Enter / Return key via beforeinput event
+    textarea.addEventListener('beforeinput', (e) => {
+      if (e.inputType === 'insertLineBreak' && !shiftHeld) {
+        e.preventDefault();
+        sendCurrentInput();
       }
     });
   }

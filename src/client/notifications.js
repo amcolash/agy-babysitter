@@ -42,7 +42,14 @@ const lastAlertTimeBySession = new Map();
 export function playNotificationSound(sessionName = null) {
   try {
     const targetSession = sessionName || getCurrentSession() || '__default__';
+    const s = sessionStates.get(targetSession);
     const now = Date.now();
+
+    // Do not play sound if this session has prompt notifications suppressed until spinner,
+    // or if the user interacted with this session within the last 5 seconds
+    if (s && (s.suppressedUntilSpinner || (s.lastInteractionAt && now - s.lastInteractionAt < 5000))) {
+      return;
+    }
 
     // 1. Check in-memory per-tab throttle (2 seconds)
     const lastSessionAlert = lastAlertTimeBySession.get(targetSession) || 0;
@@ -153,7 +160,10 @@ function getSessionState(sessionName) {
     sessionStates.set(sessionName, {
       lastSnapshot: null,
       notified: null,
-      notifiedAt: 0
+      notifiedAt: 0,
+      suppressedUntilSpinner: false,
+      lastInteractionAt: 0,
+      focusedAt: 0
     });
   }
   return sessionStates.get(sessionName);
@@ -219,8 +229,10 @@ export function clearSessionNotification(sessionName) {
     cancelFocusDismissTimer();
     resetMouseOrigin();
   }
-  const s = sessionStates.get(sessionName);
-  if (s && s.notified !== null) {
+  const s = getSessionState(sessionName);
+  s.suppressedUntilSpinner = true;
+  s.lastInteractionAt = Date.now();
+  if (s.notified !== null) {
     s.notified = null;
     s.notifiedAt = 0;
     updatePageTitle();
@@ -248,6 +260,16 @@ export function handleServerSessionNotification(sessionName, state) {
   if (!sessionName) return;
   const s = getSessionState(sessionName);
   const prevState = s.notified;
+
+  if (state === 'settled') {
+    s.suppressedUntilSpinner = false;
+  }
+
+  // If server sends 'input', do not notify if user is actively interacting or waiting for spinner
+  if (state === 'input' && (s.suppressedUntilSpinner || (s.lastInteractionAt && Date.now() - s.lastInteractionAt < 5000))) {
+    return;
+  }
+
   if (prevState === state) return;
   s.notified = state;
   s.notifiedAt = state ? Date.now() : 0;
@@ -271,8 +293,12 @@ export function handleServerSessionNotificationsSync(states) {
   if (!states) return;
   let changed = false;
   const current = getCurrentSession();
+  const now = Date.now();
   for (const [name, state] of Object.entries(states)) {
     const s = getSessionState(name);
+    if (state === 'input' && (s.suppressedUntilSpinner || (s.lastInteractionAt && now - s.lastInteractionAt < 5000))) {
+      continue;
+    }
     if (s.notified !== state) {
       s.notified = state;
       s.notifiedAt = state ? Date.now() : 0;
@@ -373,8 +399,10 @@ export function markTurnStarted(sessionName = null) {
   cancelFocusDismissTimer();
   resetMouseOrigin();
   unlockAudio();
-  const s = sessionStates.get(target);
-  if (s && s.notified !== null) {
+  const s = getSessionState(target);
+  s.lastInteractionAt = Date.now();
+  s.suppressedUntilSpinner = true;
+  if (s.notified !== null) {
     clearSessionNotification(target);
   }
 }
@@ -383,8 +411,11 @@ export function handleUserInteraction(e) {
   unlockAudio();
   const current = getCurrentSession();
   if (current) {
-    const s = sessionStates.get(current);
-    if (!s || s.notified === null) return;
+    const s = getSessionState(current);
+    s.lastInteractionAt = Date.now();
+    s.suppressedUntilSpinner = true;
+
+    if (s.notified === null) return;
 
     // As soon as the user types (keyboard press), clear the notification immediately!
     if (e && e.type === 'keydown') {
@@ -444,12 +475,16 @@ export function onTerminalDataReceived(data) {
     .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ');
 
   // If incoming stream contains braille spinner characters (e.g. ⣻ ⠋ ⠙ etc.),
-  // the agent is actively thinking: clear the buffer and clear any stale 'input' notification
+  // the agent is actively thinking: clear the buffer, clear any stale 'input' notification,
+  // and lift prompt suppression so future prompts will notify
   if (/[\u2800-\u28FF]/.test(data) || /[\u2800-\u28FF]/.test(clean)) {
     clientStreamBuffer = '';
     const s = sessionStates.get(current);
-    if (s && s.notified === 'input') {
-      clearSessionNotification(current);
+    if (s) {
+      s.suppressedUntilSpinner = false;
+      if (s.notified === 'input') {
+        clearSessionNotification(current);
+      }
     }
     return;
   }
@@ -459,9 +494,15 @@ export function onTerminalDataReceived(data) {
   // Hard stop: show notification if "Requesting permission for" or "Requesting permission to" is newly streamed
   if (/Requesting permission (?:for|to)/i.test(clientStreamBuffer)) {
     const s = getSessionState(current);
+    const now = Date.now();
+    // If notifications are suppressed until spinner or user interacted recently, do not notify
+    if (s.suppressedUntilSpinner || (s.lastInteractionAt && now - s.lastInteractionAt < 5000)) {
+      clientStreamBuffer = '';
+      return;
+    }
     if (s.notified !== 'input') {
       s.notified = 'input';
-      s.notifiedAt = Date.now();
+      s.notifiedAt = now;
       updatePageTitle();
       if (onNotificationChangeCallback) {
         onNotificationChangeCallback(current, 'input');

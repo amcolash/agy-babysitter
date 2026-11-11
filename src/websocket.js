@@ -4,7 +4,14 @@ import { WebSocketServer, WebSocket } from 'ws';
 import config from './config.js';
 import { getQuota } from './quotaManager.js';
 import { attachPtySession, listSessions, hasSession, sendTmuxKeys } from './tmuxManager.js';
-import { markTurnStarted, clearNotification, getAllNotificationStates, broadcastSessionsList, handleStreamedPermissionPrompt } from './sessionMonitor.js';
+import {
+  markTurnStarted,
+  clearNotification,
+  getAllNotificationStates,
+  broadcastSessionsList,
+  handleStreamedPermissionPrompt,
+  handleStreamedSpinner
+} from './sessionMonitor.js';
 import { getSessionLabels, setSessionLabel } from './sessionLabels.js';
 
 const SERVER_BOOT_TIME = Date.now();
@@ -121,9 +128,10 @@ export function setupWebSocketServer(server) {
               .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ');
 
             // If incoming stream contains braille spinner characters (e.g. ⣻),
-            // the agent is actively thinking: clear the buffer so old prompts cannot re-trigger
+            // the agent is actively thinking: clear the buffer and notify monitor to lift prompt suppression
             if (/[\u2800-\u28FF]/.test(rawText) || /[\u2800-\u28FF]/.test(cleanText)) {
               ptyStreamBuffer = '';
+              handleStreamedSpinner(currentAttachedSession);
             } else {
               ptyStreamBuffer = (ptyStreamBuffer + cleanText).slice(-4096);
 

@@ -10,8 +10,10 @@ import { pruneSessionLabels, getSessionLabels, onSessionLabelsChange } from './s
 const sessionStates = new Map();
 // Tracks consecutive misses when an 'input' state is active, to debounce clearing
 const pendingInputMisses = new Map();
-// Tracks sessions where the user actively dismissed the current prompt notification
+// Tracks sessions where the user actively dismissed or interacted with the current prompt notification
 const dismissedPromptSessions = new Set();
+// Tracks timestamp of last user input / interaction per session
+const lastUserInteractionBySession = new Map();
 let wssInstance = null;
 let monitorInterval = null;
 let lastSessionsHash = '';
@@ -138,6 +140,8 @@ export function broadcastSessionsList(sessions = null) {
     if (!activeNames.has(name)) {
       sessionStates.delete(name);
       pendingInputMisses.delete(name);
+      dismissedPromptSessions.delete(name);
+      lastUserInteractionBySession.delete(name);
     }
   }
   pruneSessionLabels(Array.from(activeNames));
@@ -200,6 +204,10 @@ export function renameSessionTracking(oldName, newName) {
     dismissedPromptSessions.delete(oldName);
     dismissedPromptSessions.add(newName);
   }
+  if (lastUserInteractionBySession.has(oldName)) {
+    lastUserInteractionBySession.set(newName, lastUserInteractionBySession.get(oldName));
+    lastUserInteractionBySession.delete(oldName);
+  }
 }
 
 /**
@@ -224,13 +232,32 @@ export function broadcastSessionLabels(labels = null) {
 }
 
 /**
+ * Stream handler when braille spinner characters (thinking/running) are streamed.
+ * Lifts prompt dismissal tracking so future prompts will notify.
+ * @param {string} sessionName
+ */
+export function handleStreamedSpinner(sessionName) {
+  if (!sessionName) return;
+  pendingInputMisses.delete(sessionName);
+  dismissedPromptSessions.delete(sessionName);
+  if (sessionStates.get(sessionName) === 'input') {
+    sessionStates.set(sessionName, null);
+    broadcastSessionNotification(sessionName, null);
+  }
+}
+
+/**
  * Hard-stop handler when "Requesting permission for" is newly streamed from the terminal
  * @param {string} sessionName
  */
 export function handleStreamedPermissionPrompt(sessionName) {
   if (!sessionName) return;
+  // If user already dismissed or interacted with this prompt, do not re-notify
+  if (dismissedPromptSessions.has(sessionName)) return;
+  const lastInteraction = lastUserInteractionBySession.get(sessionName) || 0;
+  if (Date.now() - lastInteraction < 5000) return;
+
   pendingInputMisses.delete(sessionName);
-  dismissedPromptSessions.delete(sessionName);
   if (sessionStates.get(sessionName) !== 'input') {
     sessionStates.set(sessionName, 'input');
     broadcastSessionNotification(sessionName, 'input');
@@ -256,8 +283,9 @@ export async function checkSessionChanges() {
 
       if (thinking) {
         // Active thinking state detected via braille characters (e.g. ⣻):
-        // Never notify while thinking, and immediately clear any stale 'input' notification
+        // Agent is working; reset dismissed prompt tracking so the next prompt will notify
         pendingInputMisses.delete(session.name);
+        dismissedPromptSessions.delete(session.name);
         if (currentState === 'input') {
           sessionStates.set(session.name, null);
           broadcastSessionNotification(session.name, null);
@@ -267,8 +295,12 @@ export async function checkSessionChanges() {
 
       if (awaiting) {
         pendingInputMisses.delete(session.name);
-        // If user already dismissed notifications for this prompt, do not re-notify
+        // If user already dismissed notifications for this prompt or is interacting, do not re-notify
         if (dismissedPromptSessions.has(session.name)) {
+          return;
+        }
+        const lastInteraction = lastUserInteractionBySession.get(session.name) || 0;
+        if (Date.now() - lastInteraction < 5000) {
           return;
         }
         if (currentState !== 'input') {
@@ -276,20 +308,16 @@ export async function checkSessionChanges() {
           broadcastSessionNotification(session.name, 'input');
         }
       } else {
-        // Prompt is no longer on screen: reset dismissed status
-        dismissedPromptSessions.delete(session.name);
-
-        if (currentState === 'input') {
-          // Confirmation prompt disappeared: after 4 consecutive checks, clear input state
-          const misses = (pendingInputMisses.get(session.name) || 0) + 1;
-          pendingInputMisses.set(session.name, misses);
-          if (misses >= 4) {
-            pendingInputMisses.delete(session.name);
+        // Prompt is no longer on screen: debounce before resetting dismissed status
+        const misses = (pendingInputMisses.get(session.name) || 0) + 1;
+        pendingInputMisses.set(session.name, misses);
+        if (misses >= 4) {
+          pendingInputMisses.delete(session.name);
+          dismissedPromptSessions.delete(session.name);
+          if (currentState === 'input') {
             sessionStates.set(session.name, null);
             broadcastSessionNotification(session.name, null);
           }
-        } else {
-          pendingInputMisses.delete(session.name);
         }
       }
     }));
@@ -404,7 +432,8 @@ export function handleLifecycleHookEvent({ event, session, workspacePath, conver
     broadcastSessionNotification(targetSession, 'input');
   } else if (event === 'pre_tool_use') {
     // Agent called a tool (e.g. run_command, write_to_file) that might request permission.
-    // Check tmux pane for confirmation prompts quickly.
+    // Reset dismissed state since this is a new tool invocation that may prompt.
+    dismissedPromptSessions.delete(targetSession);
     scheduleToolPermissionChecks(targetSession);
   } else if (event === 'post_tool_use') {
     // Tool completed: if session was in 'input' state, clear it
@@ -439,25 +468,31 @@ export function scheduleToolPermissionChecks(sessionName) {
 }
 
 /**
- * Mark that a user interaction started a turn (clears existing badge)
+ * Mark that a user interaction started a turn or interacted with the session.
+ * Clears existing notification badge and suppresses repeat notifications for current prompt.
  * @param {string} sessionName
  */
 export function markTurnStarted(sessionName) {
   if (!sessionName) return;
   pendingInputMisses.delete(sessionName);
-  dismissedPromptSessions.delete(sessionName);
+  dismissedPromptSessions.add(sessionName);
+  lastUserInteractionBySession.set(sessionName, Date.now());
+  const prevState = sessionStates.get(sessionName);
   sessionStates.set(sessionName, null);
-  broadcastSessionNotification(sessionName, null);
+  if (prevState) {
+    broadcastSessionNotification(sessionName, null);
+  }
 }
 
 /**
- * Clears active notification state for a session
+ * Clears active notification state for a session and suppresses repeat notifications for current prompt
  * @param {string} sessionName
  */
 export function clearNotification(sessionName) {
   if (!sessionName) return;
   pendingInputMisses.delete(sessionName);
   dismissedPromptSessions.add(sessionName);
+  lastUserInteractionBySession.set(sessionName, Date.now());
   const prevState = sessionStates.get(sessionName);
   sessionStates.set(sessionName, null);
   if (prevState) {
@@ -519,6 +554,7 @@ export function stopSessionMonitor() {
   sessionStates.clear();
   pendingInputMisses.clear();
   dismissedPromptSessions.clear();
+  lastUserInteractionBySession.clear();
   wssInstance = null;
 }
 
@@ -531,6 +567,7 @@ export default {
   renameSessionTracking,
   checkSessionChanges,
   handleStreamedPermissionPrompt,
+  handleStreamedSpinner,
   broadcastQuota,
   handleLifecycleHookEvent,
   scheduleToolPermissionChecks,
