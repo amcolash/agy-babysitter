@@ -960,15 +960,19 @@ export function updateSessionTabIcons() {
     }
   }
 
-  // Highlight header capsule border if background notification is active
+  // Highlight header capsule border if notification is active
   if (headerSessionBadge) {
-    if (bgNotifCount > 0) {
-      headerSessionBadge.classList.add("border-[#ECBE7B]/50", "shadow-[0_0_6px_rgba(236,190,123,0.2)]");
+    const currentNotif = current ? getSessionNotification(current) : null;
+    if (currentNotif || bgNotifCount > 0) {
+      headerSessionBadge.classList.add("border-[#ECBE7B]/60", "shadow-[0_0_6px_rgba(236,190,123,0.25)]");
       headerSessionBadge.classList.remove("border-[#3f444a]");
-      headerSessionBadge.title = `${bgNotifCount} background notification${bgNotifCount > 1 ? "s" : ""} - click to switch`;
+      const details = [];
+      if (currentNotif) details.push(`Current: ${currentNotif === "input" ? "Input Needed" : "Done"}`);
+      if (bgNotifCount > 0) details.push(`${bgNotifCount} background alert${bgNotifCount > 1 ? "s" : ""}`);
+      headerSessionBadge.title = `${details.join(" • ")} - click to switch`;
     } else {
       headerSessionBadge.classList.add("border-[#3f444a]");
-      headerSessionBadge.classList.remove("border-[#ECBE7B]/50", "shadow-[0_0_6px_rgba(236,190,123,0.2)]");
+      headerSessionBadge.classList.remove("border-[#ECBE7B]/60", "shadow-[0_0_6px_rgba(236,190,123,0.25)]");
       headerSessionBadge.title = "Click to switch sessions";
     }
   }

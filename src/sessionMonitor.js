@@ -10,10 +10,8 @@ import { pruneSessionLabels, getSessionLabels, onSessionLabelsChange } from './s
 const sessionStates = new Map();
 // Tracks consecutive misses when an 'input' state is active, to debounce clearing
 const pendingInputMisses = new Map();
-// Tracks sessions where the user actively dismissed or interacted with the current prompt notification
+// Tracks sessions where the user actively dismissed the current prompt notification
 const dismissedPromptSessions = new Set();
-// Tracks timestamp of last user input / interaction per session
-const lastUserInteractionBySession = new Map();
 let wssInstance = null;
 let monitorInterval = null;
 let lastSessionsHash = '';
@@ -25,12 +23,14 @@ function getSessionsSignature(sessions) {
 
 /**
  * Detects if the terminal pane has an active thinking/spinner indicator (braille characters like ⣻, ⠋, ⠙)
+ * in its active bottom lines.
  * @param {string} paneContent
  * @returns {boolean}
  */
 export function isPaneThinking(paneContent) {
   if (!paneContent || typeof paneContent !== 'string') return false;
-  const lines = paneContent.split('\n').slice(-50).join('\n');
+  // Inspect only the bottom 10 lines where active spinners reside
+  const lines = paneContent.split('\n').slice(-10).join('\n');
   return /[\u2800-\u28FF]/.test(lines);
 }
 
@@ -43,48 +43,27 @@ export function isPaneThinking(paneContent) {
 export function isPaneAwaitingConfirmation(paneContent) {
   if (!paneContent || typeof paneContent !== 'string') return false;
 
-  // Inspect the bottom 50 lines of the visible pane where active prompts reside
-  const lines = paneContent.split('\n').slice(-50).join('\n');
+  // Inspect only the bottom 15 lines of the visible pane where active prompts reside
+  const lines = paneContent.split('\n').slice(-15).join('\n');
 
-  // If the terminal pane contains braille spinner characters (e.g. ⣻ ⠋ ⠙ etc.),
-  // the agent is in an active "thinking" state and no notification is needed.
-  if (/[\u2800-\u28FF]/.test(lines)) {
-    return false;
-  }
-
-  // Hard stop 1: Antigravity permission prompt header.
-  // When "Requesting permission for" or "Requesting permission to" is present in the active area,
-  // the session is definitively awaiting user approval.
-  if (/Requesting permission (?:for|to)/i.test(lines)) {
+  // Condition 1: Active interactive choice prompt (must have active navigation hint ↑/↓ AND menu choices with selection cursor)
+  const hasNavCursor = /(?:↑\/↓|Navigate\s*·)/.test(lines);
+  const hasMenuChoices = /(?:^|\n)\s*(?:>|\s)\s*1\.\s+\S[\s\S]*?(?:^|\n)\s*(?:>|\s)\s*2\.\s+\S/m.test(lines);
+  if (hasNavCursor && hasMenuChoices) {
     return true;
   }
 
-  // 2. Specific permission questions
-  const hasPermissionQuestion = /(?:Run this command\?|Allow access to this (?:file|URL)\?|Allow calling this tool\?|Do you want to (?:run|proceed|continue)\?|Allow (?:reading|editing|writing|modifying) (?:file|this)?)/i.test(lines);
-
-  // 3. Choice options
-  const hasAffirmativeChoice = /(?:(?:>|\s)\s*1\.\s*(?:Yes|Allow|Run)|\b(?:Yes|Allow|Run),\s*(?:run|allow|proceed))\b/i.test(lines);
-  const hasCancelChoice = /(?:(?:>|\s)\s*[23]\.\s*(?:No|Cancel|Reject|Deny)|\bNo,\s*cancel)\b/i.test(lines);
-
-  // Condition A: Specific permission question paired with a recognizable option
-  if (hasPermissionQuestion && (hasAffirmativeChoice || hasCancelChoice)) {
+  // Condition 2: Permission prompt (requires permission header/question AND explicit affirmative + cancellation choices)
+  const hasPermissionHeader = /(?:Requesting|Requires?)\s+permission|Run this command\?|Allow calling this tool\?|Allow access to|Do you want to (?:run|proceed|continue)/i.test(lines);
+  const hasYesChoice = /(?:(?:>|\s)\s*1\.\s*(?:Yes|Allow|Run)|\bYes,\s*(?:run|allow|proceed))\b/i.test(lines);
+  const hasNoChoice = /(?:(?:>|\s)\s*[23]\.\s*(?:No|Cancel|Reject|Deny)|\bNo,\s*cancel)\b/i.test(lines);
+  if (hasPermissionHeader && hasYesChoice && hasNoChoice) {
     return true;
   }
 
-  // 4. Keyboard navigation hints commonly shown in prompt modals
-  const hasNavigationHint = /(?:↑\/↓|Navigate\s*·)/i.test(lines);
-
-  // 5. Numbered menu choices (e.g. "> 1. " followed by " 2. ")
-  const hasMenuChoices = /(?:>|\s)\s*1\.\s+.*\n.*(?:>|\s)\s*2\.\s+/i.test(lines);
-
-  // Condition B: Interactive choice menu (e.g. ask_question prompt with choices and navigation)
-  if (hasNavigationHint && hasMenuChoices) {
-    return true;
-  }
-
-  // 6. Generic interactive CLI prompts (e.g. [y/n] or (Y/n) at end of prompt)
-  const hasGenericPrompt = /(?:\[y\/n\]|\([yY]\/[nN]\))\s*$/im.test(lines);
-  if (hasGenericPrompt) {
+  // Condition 3: Generic interactive CLI prompt waiting at prompt line (e.g. [y/n] or (Y/n))
+  const lastLine = paneContent.trim().split('\n').pop() || '';
+  if (/(?:\[y\/n\]|\([yY]\/[nN]\)|\[[yY]\/[nN]\])\s*$/i.test(lastLine)) {
     return true;
   }
 
@@ -106,8 +85,8 @@ export function inspectSessionPane(sessionName) {
         if (err || !stdout) {
           return resolve({ awaiting: false, thinking: false });
         }
-        const thinking = isPaneThinking(stdout);
-        const awaiting = !thinking && isPaneAwaitingConfirmation(stdout);
+        const awaiting = isPaneAwaitingConfirmation(stdout);
+        const thinking = !awaiting && isPaneThinking(stdout);
         resolve({ awaiting, thinking });
       }
     );
@@ -141,7 +120,6 @@ export function broadcastSessionsList(sessions = null) {
       sessionStates.delete(name);
       pendingInputMisses.delete(name);
       dismissedPromptSessions.delete(name);
-      lastUserInteractionBySession.delete(name);
     }
   }
   pruneSessionLabels(Array.from(activeNames));
@@ -204,10 +182,6 @@ export function renameSessionTracking(oldName, newName) {
     dismissedPromptSessions.delete(oldName);
     dismissedPromptSessions.add(newName);
   }
-  if (lastUserInteractionBySession.has(oldName)) {
-    lastUserInteractionBySession.set(newName, lastUserInteractionBySession.get(oldName));
-    lastUserInteractionBySession.delete(oldName);
-  }
 }
 
 /**
@@ -247,21 +221,19 @@ export function handleStreamedSpinner(sessionName) {
 }
 
 /**
- * Hard-stop handler when "Requesting permission for" is newly streamed from the terminal
+ * Hard-stop handler when a permission prompt is newly streamed from the terminal
  * @param {string} sessionName
  */
 export function handleStreamedPermissionPrompt(sessionName) {
   if (!sessionName) return;
   // If user already dismissed or interacted with this prompt, do not re-notify
   if (dismissedPromptSessions.has(sessionName)) return;
-  const lastInteraction = lastUserInteractionBySession.get(sessionName) || 0;
-  if (Date.now() - lastInteraction < 5000) return;
 
   pendingInputMisses.delete(sessionName);
   if (sessionStates.get(sessionName) !== 'input') {
     sessionStates.set(sessionName, 'input');
     broadcastSessionNotification(sessionName, 'input');
-    console.log(`[StreamMonitor] Hard stop: "Requesting permission for" streamed in session '${sessionName}' -> broadcasted 'input' notification`);
+    console.log(`[StreamMonitor] Permission prompt streamed in session '${sessionName}' -> broadcasted 'input' notification`);
   }
 }
 
@@ -295,12 +267,8 @@ export async function checkSessionChanges() {
 
       if (awaiting) {
         pendingInputMisses.delete(session.name);
-        // If user already dismissed notifications for this prompt or is interacting, do not re-notify
+        // If user already dismissed notifications for this prompt, do not re-notify
         if (dismissedPromptSessions.has(session.name)) {
-          return;
-        }
-        const lastInteraction = lastUserInteractionBySession.get(session.name) || 0;
-        if (Date.now() - lastInteraction < 5000) {
           return;
         }
         if (currentState !== 'input') {
@@ -311,7 +279,7 @@ export async function checkSessionChanges() {
         // Prompt is no longer on screen: debounce before resetting dismissed status
         const misses = (pendingInputMisses.get(session.name) || 0) + 1;
         pendingInputMisses.set(session.name, misses);
-        if (misses >= 4) {
+        if (misses >= 3) {
           pendingInputMisses.delete(session.name);
           dismissedPromptSessions.delete(session.name);
           if (currentState === 'input') {
@@ -468,15 +436,13 @@ export function scheduleToolPermissionChecks(sessionName) {
 }
 
 /**
- * Mark that a user interaction started a turn or interacted with the session.
- * Clears existing notification badge and suppresses repeat notifications for current prompt.
+ * Mark that a user interaction started a turn (clears existing badge)
  * @param {string} sessionName
  */
 export function markTurnStarted(sessionName) {
   if (!sessionName) return;
   pendingInputMisses.delete(sessionName);
-  dismissedPromptSessions.add(sessionName);
-  lastUserInteractionBySession.set(sessionName, Date.now());
+  dismissedPromptSessions.delete(sessionName);
   const prevState = sessionStates.get(sessionName);
   sessionStates.set(sessionName, null);
   if (prevState) {
@@ -492,7 +458,6 @@ export function clearNotification(sessionName) {
   if (!sessionName) return;
   pendingInputMisses.delete(sessionName);
   dismissedPromptSessions.add(sessionName);
-  lastUserInteractionBySession.set(sessionName, Date.now());
   const prevState = sessionStates.get(sessionName);
   sessionStates.set(sessionName, null);
   if (prevState) {
@@ -554,7 +519,6 @@ export function stopSessionMonitor() {
   sessionStates.clear();
   pendingInputMisses.clear();
   dismissedPromptSessions.clear();
-  lastUserInteractionBySession.clear();
   wssInstance = null;
 }
 

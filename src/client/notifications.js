@@ -42,14 +42,7 @@ const lastAlertTimeBySession = new Map();
 export function playNotificationSound(sessionName = null) {
   try {
     const targetSession = sessionName || getCurrentSession() || '__default__';
-    const s = sessionStates.get(targetSession);
     const now = Date.now();
-
-    // Do not play sound if this session has prompt notifications suppressed until spinner,
-    // or if the user interacted with this session within the last 5 seconds
-    if (s && (s.suppressedUntilSpinner || (s.lastInteractionAt && now - s.lastInteractionAt < 5000))) {
-      return;
-    }
 
     // 1. Check in-memory per-tab throttle (2 seconds)
     const lastSessionAlert = lastAlertTimeBySession.get(targetSession) || 0;
@@ -161,8 +154,6 @@ function getSessionState(sessionName) {
       lastSnapshot: null,
       notified: null,
       notifiedAt: 0,
-      suppressedUntilSpinner: false,
-      lastInteractionAt: 0,
       focusedAt: 0
     });
   }
@@ -212,13 +203,18 @@ export function cancelFocusDismissTimer() {
   }
 }
 
-export function scheduleFocusDismiss(sessionName, delayMs = 3000) {
+export function scheduleFocusDismiss(sessionName, delayMs = 6000) {
   if (!sessionName) return;
   cancelFocusDismissTimer();
   focusDismissTimer = setTimeout(() => {
     focusDismissTimer = null;
     if (getCurrentSession() === sessionName) {
-      clearSessionNotification(sessionName);
+      const s = sessionStates.get(sessionName);
+      // Only auto-dismiss completed turns ('settled') while window is actively focused.
+      // Never auto-dismiss 'input' prompts awaiting user confirmation!
+      if (s && s.notified === 'settled' && typeof document !== 'undefined' && document.hasFocus() && !document.hidden) {
+        clearSessionNotification(sessionName);
+      }
     }
   }, delayMs);
 }
@@ -229,10 +225,8 @@ export function clearSessionNotification(sessionName) {
     cancelFocusDismissTimer();
     resetMouseOrigin();
   }
-  const s = getSessionState(sessionName);
-  s.suppressedUntilSpinner = true;
-  s.lastInteractionAt = Date.now();
-  if (s.notified !== null) {
+  const s = sessionStates.get(sessionName);
+  if (s && s.notified !== null) {
     s.notified = null;
     s.notifiedAt = 0;
     updatePageTitle();
@@ -261,15 +255,6 @@ export function handleServerSessionNotification(sessionName, state) {
   const s = getSessionState(sessionName);
   const prevState = s.notified;
 
-  if (state === 'settled') {
-    s.suppressedUntilSpinner = false;
-  }
-
-  // If server sends 'input', do not notify if user is actively interacting or waiting for spinner
-  if (state === 'input' && (s.suppressedUntilSpinner || (s.lastInteractionAt && Date.now() - s.lastInteractionAt < 5000))) {
-    return;
-  }
-
   if (prevState === state) return;
   s.notified = state;
   s.notifiedAt = state ? Date.now() : 0;
@@ -277,15 +262,15 @@ export function handleServerSessionNotification(sessionName, state) {
   if (onNotificationChangeCallback) {
     onNotificationChangeCallback(sessionName, state);
   }
-  if (state && state !== prevState) {
+  if (state) {
     playNotificationSound(sessionName);
   }
   if (!state && getCurrentSession() === sessionName) {
     cancelFocusDismissTimer();
   }
-  // If notification arrived while this tab is active, auto-clear after 3 seconds on the tab
-  if (state && getCurrentSession() === sessionName) {
-    scheduleFocusDismiss(sessionName, 3000);
+  // If a turn completed ('settled') while this tab is active and window is focused, auto-clear after 6 seconds
+  if (state === 'settled' && getCurrentSession() === sessionName && typeof document !== 'undefined' && document.hasFocus() && !document.hidden) {
+    scheduleFocusDismiss(sessionName, 6000);
   }
 }
 
@@ -293,12 +278,8 @@ export function handleServerSessionNotificationsSync(states) {
   if (!states) return;
   let changed = false;
   const current = getCurrentSession();
-  const now = Date.now();
   for (const [name, state] of Object.entries(states)) {
     const s = getSessionState(name);
-    if (state === 'input' && (s.suppressedUntilSpinner || (s.lastInteractionAt && now - s.lastInteractionAt < 5000))) {
-      continue;
-    }
     if (s.notified !== state) {
       s.notified = state;
       s.notifiedAt = state ? Date.now() : 0;
@@ -307,8 +288,8 @@ export function handleServerSessionNotificationsSync(states) {
     if (!state && current === name) {
       cancelFocusDismissTimer();
     }
-    if (state && current === name) {
-      scheduleFocusDismiss(name, 3000);
+    if (state === 'settled' && current === name && typeof document !== 'undefined' && document.hasFocus() && !document.hidden) {
+      scheduleFocusDismiss(name, 6000);
     }
   }
   if (changed) {
@@ -358,6 +339,13 @@ function handleMouseMove(e) {
     return;
   }
 
+  // Grace period after notification arrival so moving mouse at the moment of chime doesn't kill it instantly
+  if (s.notifiedAt && Date.now() - s.notifiedAt < 500) {
+    mouseOriginX = e.clientX;
+    mouseOriginY = e.clientY;
+    return;
+  }
+
   if (mouseOriginX === null || mouseOriginY === null) {
     mouseOriginX = e.clientX;
     mouseOriginY = e.clientY;
@@ -386,9 +374,9 @@ export function onSessionFocused(sessionName) {
   cancelFocusDismissTimer();
   resetMouseOrigin();
 
-  // If this session has an active notification, clear after 3 seconds on the tab
-  if (s.notified !== null) {
-    scheduleFocusDismiss(sessionName, 3000);
+  // If this session has a completed turn ('settled'), dismiss 1.5s after switching to it so user sees it
+  if (s.notified === 'settled') {
+    scheduleFocusDismiss(sessionName, 1500);
   }
 }
 
@@ -400,8 +388,6 @@ export function markTurnStarted(sessionName = null) {
   resetMouseOrigin();
   unlockAudio();
   const s = getSessionState(target);
-  s.lastInteractionAt = Date.now();
-  s.suppressedUntilSpinner = true;
   if (s.notified !== null) {
     clearSessionNotification(target);
   }
@@ -412,20 +398,26 @@ export function handleUserInteraction(e) {
   const current = getCurrentSession();
   if (current) {
     const s = getSessionState(current);
-    s.lastInteractionAt = Date.now();
-    s.suppressedUntilSpinner = true;
-
     if (s.notified === null) return;
 
-    // As soon as the user types (keyboard press), clear the notification immediately!
+    // Keyboard interaction:
     if (e && e.type === 'keydown') {
-      clearSessionNotification(current);
+      // Completed turn ('settled'): any keystroke dismisses the notification
+      if (s.notified === 'settled') {
+        clearSessionNotification(current);
+        return;
+      }
+      // Pending input prompt ('input'): only Enter (submitting) dismisses the notification.
+      // Arrow keys (up/down) and typing text into options do NOT dismiss, preventing repeated chime spam!
+      if (s.notified === 'input' && e.key === 'Enter') {
+        clearSessionNotification(current);
+        return;
+      }
       return;
     }
 
-    // Clicking / pointerdown / mousedown / touchstart clears the notification immediately!
+    // Clicking / pointerdown / mousedown / touchstart clears notification after focus grace period
     if (e && (e.type === 'pointerdown' || e.type === 'touchstart' || e.type === 'mousedown')) {
-      // Grace period if this click was the one that switched to this tab within the last 300ms
       if (s.focusedAt && Date.now() - s.focusedAt < 300) {
         return;
       }
@@ -475,43 +467,17 @@ export function onTerminalDataReceived(data) {
     .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ');
 
   // If incoming stream contains braille spinner characters (e.g. ⣻ ⠋ ⠙ etc.),
-  // the agent is actively thinking: clear the buffer, clear any stale 'input' notification,
-  // and lift prompt suppression so future prompts will notify
+  // the agent is actively thinking: clear the buffer and clear any stale 'input' notification
   if (/[\u2800-\u28FF]/.test(data) || /[\u2800-\u28FF]/.test(clean)) {
     clientStreamBuffer = '';
     const s = sessionStates.get(current);
-    if (s) {
-      s.suppressedUntilSpinner = false;
-      if (s.notified === 'input') {
-        clearSessionNotification(current);
-      }
+    if (s && s.notified === 'input') {
+      clearSessionNotification(current);
     }
     return;
   }
 
   clientStreamBuffer = (clientStreamBuffer + clean).slice(-4096);
-
-  // Hard stop: show notification if "Requesting permission for" or "Requesting permission to" is newly streamed
-  if (/Requesting permission (?:for|to)/i.test(clientStreamBuffer)) {
-    const s = getSessionState(current);
-    const now = Date.now();
-    // If notifications are suppressed until spinner or user interacted recently, do not notify
-    if (s.suppressedUntilSpinner || (s.lastInteractionAt && now - s.lastInteractionAt < 5000)) {
-      clientStreamBuffer = '';
-      return;
-    }
-    if (s.notified !== 'input') {
-      s.notified = 'input';
-      s.notifiedAt = now;
-      updatePageTitle();
-      if (onNotificationChangeCallback) {
-        onNotificationChangeCallback(current, 'input');
-      }
-      playNotificationSound(current);
-      scheduleFocusDismiss(current, 3000);
-    }
-    clientStreamBuffer = '';
-  }
 }
 
 /**
